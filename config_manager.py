@@ -1,25 +1,60 @@
 import copy
 import json
 import os
+import sys
 import uuid
 from typing import Dict, Any, List, Optional
 from tag_parser import parse_tag_definition
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-CONFIG_FILE = "config.json"
-CONFIG_INIT_FILE = "config.init.json"
+
+def get_app_dir() -> str:
+    """Returns the persistent directory of the executable or main script (where user configs live)."""
+    if getattr(sys, "frozen", False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+def get_bundle_dir() -> str:
+    """Returns the bundled resources directory (supports PyInstaller _MEIPASS)."""
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        return sys._MEIPASS
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+def get_resource_path(relative_path: str) -> str:
+    """Resolves resource path for both development and bundled PyInstaller environments."""
+    bundle_path = os.path.join(get_bundle_dir(), relative_path)
+    if os.path.exists(bundle_path):
+        return bundle_path
+    app_path = os.path.join(get_app_dir(), relative_path)
+    if os.path.exists(app_path):
+        return app_path
+    return bundle_path
+
+
+BASE_DIR = get_app_dir()
+BUNDLE_DIR = get_bundle_dir()
+CONFIG_FILE = os.path.join(BASE_DIR, "config.json")
+CONFIG_INIT_FILE = os.path.join(BASE_DIR, "config.init.json")
 
 
 def get_init_config_path(custom_path: Optional[str] = None) -> str:
     """Returns the absolute path to config.init.json."""
-    target = custom_path or CONFIG_INIT_FILE
-    if os.path.exists(target):
-        return os.path.abspath(target)
-    if not custom_path:
-        base_init = os.path.join(BASE_DIR, "config.init.json")
-        if os.path.exists(base_init):
-            return base_init
-    return os.path.abspath(target)
+    if custom_path:
+        return os.path.abspath(custom_path)
+
+    # 1. First priority: look for config.init.json next to executable/script
+    app_init = os.path.join(BASE_DIR, "config.init.json")
+    if os.path.exists(app_init):
+        return app_init
+
+    # 2. Second priority: look in bundle directory if running from PyInstaller
+    bundle_init = os.path.join(BUNDLE_DIR, "config.init.json")
+    if os.path.exists(bundle_init):
+        return bundle_init
+
+    # 3. Default to BASE_DIR so self-healing creates it next to executable
+    return app_init
 
 
 def get_fallback_template_data() -> Dict[str, Any]:
@@ -162,16 +197,17 @@ def is_ephemeral_group(group: Dict[str, Any]) -> bool:
     return group.get("id") == "group-detected" or group.get("name") == "감지된 태그"
 
 
-def load_config(file_path: str = CONFIG_FILE) -> Dict[str, Any]:
+def load_config(file_path: Optional[str] = None) -> Dict[str, Any]:
+    target_path = file_path or CONFIG_FILE
     default_config = load_default_config()
 
-    if not os.path.exists(file_path):
+    if not os.path.exists(target_path):
         # Generate config.json directly from config.init.json template
-        save_config(default_config, file_path)
+        save_config(default_config, target_path)
         return copy.deepcopy(default_config)
 
     try:
-        with open(file_path, "r", encoding="utf-8") as f:
+        with open(target_path, "r", encoding="utf-8") as f:
             data = json.load(f)
 
         # Migrate old format if groups not present
@@ -206,14 +242,15 @@ def load_config(file_path: str = CONFIG_FILE) -> Dict[str, Any]:
         return copy.deepcopy(default_config)
 
 
-def save_config(config_data: Dict[str, Any], file_path: str = CONFIG_FILE) -> None:
+def save_config(config_data: Dict[str, Any], file_path: Optional[str] = None) -> None:
+    target_path = file_path or CONFIG_FILE
     try:
         data_to_save = copy.deepcopy(config_data)
         # Never persist ephemeral detected groups to disk
         if "groups" in data_to_save and isinstance(data_to_save["groups"], list):
             data_to_save["groups"] = [g for g in data_to_save["groups"] if not is_ephemeral_group(g)]
 
-        with open(file_path, "w", encoding="utf-8") as f:
+        with open(target_path, "w", encoding="utf-8") as f:
             json.dump(data_to_save, f, ensure_ascii=False, indent=2)
     except Exception as e:
         print(f"Error saving config: {e}")

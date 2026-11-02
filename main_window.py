@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import (
 )
 
 import icon_factory
-from config_manager import load_config, save_config, CONFIG_FILE
+from config_manager import load_config, save_config, CONFIG_FILE, get_resource_path
 from tag_button import TagButton
 from tag_dialog import TagDialog, PRESET_COLORS
 from settings_dialog import SettingsDialog
@@ -52,7 +52,7 @@ class MainWindow(QMainWindow):
         self.all_tag_buttons: List[TagButton] = []
 
         # Window & Taskbar Icon
-        icon_path = os.path.join(os.path.dirname(__file__), "assets", "icon.png")
+        icon_path = get_resource_path(os.path.join("assets", "icon.png"))
         if os.path.exists(icon_path):
             self.setWindowIcon(QIcon(icon_path))
 

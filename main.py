@@ -4,6 +4,7 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtGui import QIcon, QGuiApplication
 from main_window import MainWindow
+from config_manager import get_resource_path
 
 
 def main():
@@ -25,9 +26,8 @@ def main():
     app.setApplicationName("Easy Tagger")
     app.setOrganizationName("EasyTagger")
 
-    assets_dir = os.path.join(os.path.dirname(__file__), "assets")
-    icon_ico = os.path.join(assets_dir, "icon.ico")
-    icon_png = os.path.join(assets_dir, "icon.png")
+    icon_ico = get_resource_path(os.path.join("assets", "icon.ico"))
+    icon_png = get_resource_path(os.path.join("assets", "icon.png"))
     if os.path.exists(icon_ico):
         app.setWindowIcon(QIcon(icon_ico))
     elif os.path.exists(icon_png):
