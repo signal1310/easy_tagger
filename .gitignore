@@ -1,0 +1,23 @@
+# Application user config (generated automatically from config.init.json)
+config.json
+
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution and build artifacts
+build/
+dist/
+*.spec
+*.egg-info/
+
+# Environments and OS files
+.env
+.venv
+env/
+venv/
+Thumbs.db
+Desktop.ini
+.DS_Store
+
