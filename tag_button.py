@@ -107,24 +107,20 @@ class TagButton(QPushButton):
         self.setFixedSize(w, self.fixed_height)
         self.updateGeometry()
 
-        # Build tooltip: Description on hover as requested
+        # Build concise tooltip: Only essential description and active file status
         desc = self.data.get("description", "").strip()
         tip_lines = []
         if desc:
-            tip_lines.append(f"[설명] {desc}")
-        tip_lines.append(f"태그: [{raw_label}]")
+            tip_lines.append(desc)
 
         if self.tag_state == "on":
-            tip_lines.append("• 현재 파일에 적용됨 (클릭하여 제거)")
+            tip_lines.append("✓ 적용됨 (클릭 시 제거)")
         elif self.tag_state == "partial":
-            tip_lines.append("• 일부 파일에만 적용됨 (클릭하여 전체 추가)")
+            tip_lines.append("◐ 일부 적용됨 (클릭 시 전체 추가)")
         elif self.tag_state == "off":
-            tip_lines.append("• 현재 파일에 미적용 (클릭하여 추가)")
-        else:
-            tip_lines.append("• 파일을 드래그 & 드롭하여 태그 적용")
+            tip_lines.append("+ 미적용 (클릭 시 추가)")
 
-        tip_lines.append("(우클릭: 수정 / 복제 / 삭제)")
-        self.setToolTip("\n".join(tip_lines))
+        self.setToolTip("\n".join(tip_lines) if tip_lines else "")
 
         # Style computation based on tag_state and theme
         adapted_bg, contrast_text = ThemeManager.adapt_color_for_theme(bg, self.effective_theme)

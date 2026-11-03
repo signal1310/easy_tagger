@@ -193,3 +193,63 @@ class ThemedMessageBox(QMessageBox):
         )
         box.exec()
 
+
+class HelpDialog(QDialog):
+    """
+    Themed dialog explaining mouse gestures, keyboard shortcuts, and tag tips.
+    """
+    def __init__(self, effective_theme: str = "dark", parent=None):
+        super().__init__(parent)
+        self.effective_theme = effective_theme
+        self.setWindowTitle("사용 팁 및 단축키 안내")
+        self.setMinimumWidth(390)
+        self.setStyleSheet(ThemeManager.get_dialog_style(self.effective_theme))
+        self._init_ui()
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        ThemeManager.apply_titlebar_theme(self, self.effective_theme)
+
+    def _init_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setSpacing(12)
+        layout.setContentsMargins(18, 18, 18, 18)
+
+        # 1. Mouse Gestures
+        group_mouse = QGroupBox("🖱️ 마우스 제스처")
+        mouse_layout = QVBoxLayout(group_mouse)
+        mouse_layout.setSpacing(6)
+        mouse_layout.addWidget(QLabel("• <b>Ctrl + 드래그 (태그)</b>: 태그 순서 변경 및 다른 그룹으로 이동"))
+        mouse_layout.addWidget(QLabel("• <b>Ctrl + 드래그 (그룹 바)</b>: 그룹 상/하 순서 변경"))
+        mouse_layout.addWidget(QLabel("• <b>파일 드롭</b>: 탐색기에서 파일을 창에 드롭하여 즉시 편집"))
+        mouse_layout.addWidget(QLabel("• <b>태그 클릭 (파일 편집 중)</b>: 해당 태그 추가/제거 토글"))
+        mouse_layout.addWidget(QLabel("• <b>우클릭</b>: 태그 수정/복제/삭제 및 그룹 메뉴"))
+        layout.addWidget(group_mouse)
+
+        # 2. Keyboard Shortcuts
+        group_keys = QGroupBox("⌨️ 키보드 단축키")
+        keys_layout = QVBoxLayout(group_keys)
+        keys_layout.setSpacing(6)
+        keys_layout.addWidget(QLabel("• <b>Ctrl + Z</b>: 실행 취소 (마지막 태그 작업 전 파일명 복원)"))
+        keys_layout.addWidget(QLabel("• <b>Ctrl + ,</b>: 환경 설정 열기"))
+        keys_layout.addWidget(QLabel("• <b>F1</b>: 이 도움말 창 열기"))
+        layout.addWidget(group_keys)
+
+        # 3. Tag Features
+        group_tags = QGroupBox("🏷️ 태그 활용 팁")
+        tags_layout = QVBoxLayout(group_tags)
+        tags_layout.setSpacing(6)
+        tags_layout.addWidget(QLabel("• <b>고정 속성 (예: -fps 60)</b>: 동일 키가 있을 경우 자동 교체"))
+        tags_layout.addWidget(QLabel("• <b>입력형 속성 (예: -score ?)</b>: 클릭 시 실시간 값 입력 프롬프트"))
+        layout.addWidget(group_tags)
+
+        # Close button
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+        btn_ok = QPushButton("확인")
+        btn_ok.setObjectName("btnSave")
+        btn_ok.setFixedWidth(80)
+        btn_ok.clicked.connect(self.accept)
+        btn_layout.addWidget(btn_ok)
+        layout.addLayout(btn_layout)
+

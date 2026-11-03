@@ -220,12 +220,7 @@ class TagDialog(QDialog):
         preview_style += "\n" + ThemeManager.get_tooltip_style(self.effective_theme)
         self.preview_btn.setStyleSheet(preview_style)
 
-        tip_parts = []
-        if desc:
-            tip_parts.append(f"[설명] {desc}")
-        tip_parts.append(f"태그: [{name}]")
-        tip_parts.append("• 호버링 툴팁 미리보기")
-        self.preview_btn.setToolTip("\n".join(tip_parts))
+        self.preview_btn.setToolTip(desc if desc else "")
 
     def _save_and_accept(self):
         raw_name = self.edit_name.text().strip() or "태그"

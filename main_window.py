@@ -15,7 +15,7 @@ from tag_button import TagButton
 from tag_dialog import TagDialog, PRESET_COLORS
 from settings_dialog import SettingsDialog
 from group_widget import GroupWidget
-from dialog_utils import GroupDialog, ThemedPromptDialog, ThemedMessageBox
+from dialog_utils import GroupDialog, ThemedPromptDialog, ThemedMessageBox, HelpDialog
 from tag_parser import (
     get_tag_name,
     parse_tag_definition,
@@ -148,6 +148,10 @@ class MainWindow(QMainWindow):
             self.btn_settings.setIcon(icon_factory.get_icon("settings", theme=eff, size=15))
             self.btn_settings.setIconSize(btn_icon_size)
 
+        if hasattr(self, "btn_help"):
+            self.btn_help.setIcon(icon_factory.get_icon("help", theme=eff, size=15))
+            self.btn_help.setIconSize(btn_icon_size)
+
         if hasattr(self, "btn_close_active_file"):
             self.btn_close_active_file.setIcon(icon_factory.get_icon("x", theme=eff, size=12))
             self.btn_close_active_file.setIconSize(QSize(12, 12))
@@ -257,6 +261,13 @@ class MainWindow(QMainWindow):
         self.btn_settings.clicked.connect(self._open_settings_dialog)
         bar_layout.addWidget(self.btn_settings)
 
+        self.btn_help = QPushButton()
+        self.btn_help.setObjectName("btnHeaderAction")
+        self.btn_help.setToolTip("사용 팁 및 단축키 안내 (F1)")
+        self.btn_help.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_help.clicked.connect(self._open_help_dialog)
+        bar_layout.addWidget(self.btn_help)
+
         self._update_action_bar_icons()
 
         main_vbox.addWidget(self.active_file_bar)
@@ -296,6 +307,11 @@ class MainWindow(QMainWindow):
         settings_action.setShortcut(QKeySequence("Ctrl+,"))
         settings_action.triggered.connect(self._open_settings_dialog)
         self.addAction(settings_action)
+
+        help_action = QAction("도움말", self)
+        help_action.setShortcut(QKeySequence("F1"))
+        help_action.triggered.connect(self._open_help_dialog)
+        self.addAction(help_action)
 
     # ------------------ Drag and Drop onto Window (Load Active File) ------------------
 
@@ -563,6 +579,10 @@ class MainWindow(QMainWindow):
             self._apply_window_flags()
             self._refresh_groups()
             QToolTip.showText(QCursor.pos(), "설정이 저장되었습니다.", self)
+
+    def _open_help_dialog(self):
+        dlg = HelpDialog(effective_theme=self.get_effective_theme(), parent=self)
+        dlg.exec()
 
     def closeEvent(self, event):
         self.config["window_width"] = self.width()

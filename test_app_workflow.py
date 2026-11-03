@@ -211,8 +211,8 @@ class TestAppWorkflow(unittest.TestCase):
         }
         btn = TagButton(data, fixed_height=38)
         self.assertEqual(btn.text(), "인터뷰")
-        self.assertIn("인물 인터뷰 영상 자료", btn.toolTip())
-        self.assertIn("[인터뷰]", btn.toolTip())
+        self.assertEqual(btn.toolTip(), "인물 인터뷰 영상 자료")
+        self.assertNotIn("우클릭", btn.toolTip())
 
     def test_auto_detect_unknown_tags_from_file(self):
         # Create a file with a tag that does NOT exist in the program
