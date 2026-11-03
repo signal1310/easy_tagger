@@ -32,21 +32,4 @@ def get_resource_path(relative_path: str) -> str:
 BASE_DIR = get_app_dir()
 BUNDLE_DIR = get_bundle_dir()
 CONFIG_FILE = os.path.join(BASE_DIR, "config.json")
-CONFIG_INIT_FILE = os.path.join(BASE_DIR, "config.init.json")
-
-
-def get_init_config_path(custom_path: Optional[str] = None) -> str:
-    """Returns the absolute path to config.init.json."""
-    if custom_path:
-        return os.path.abspath(custom_path)
-
-    app_init = os.path.join(BASE_DIR, "config.init.json")
-    if os.path.exists(app_init):
-        return app_init
-
-    bundle_init = os.path.join(BUNDLE_DIR, "config.init.json")
-    if os.path.exists(bundle_init):
-        return bundle_init
-
-    return app_init
 

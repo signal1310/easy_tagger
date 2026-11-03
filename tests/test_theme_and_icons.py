@@ -63,8 +63,17 @@ class TestThemeAndIcons(unittest.TestCase):
         self.assertEqual(pal_dark.color(QPalette.ColorRole.ToolTipBase).name().lower(), "#26262a")
         self.assertEqual(pal_dark.color(QPalette.ColorRole.ToolTipText).name().lower(), "#ededed")
 
-        self.assertIn("QMenu", ThemeManager.get_context_menu_style("dark"))
-        self.assertIn("QDialog", ThemeManager.get_dialog_style("light"))
+        ctx_menu_style = ThemeManager.get_context_menu_style("dark")
+        self.assertIn("QMenu", ctx_menu_style)
+        self.assertIn("QMenu::icon", ctx_menu_style)
+        self.assertIn("padding-left: 10px", ctx_menu_style)
+
+        dialog_style = ThemeManager.get_dialog_style("dark")
+        self.assertIn("QDialog", dialog_style)
+        self.assertIn("QSpinBox::up-button", dialog_style)
+        self.assertIn("QSpinBox::down-button", dialog_style)
+        self.assertIn("QComboBox::drop-down", dialog_style)
+        self.assertIn("QComboBox::down-arrow", dialog_style)
 
         dummy = QWidget()
         ThemeManager.apply_titlebar_theme(dummy, "dark")

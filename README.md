@@ -31,7 +31,7 @@
 * **시스템 맞춤 테마**: OS 다크/라이트 모드 자동 동기화 및 Windows DWM 네이티브 타이틀바 색상 연동
 
 ### 5. 설정 템플릿 관리 및 자체 자동 복구 (Self-Healing)
-* **배포와 사용자 설정 분리**: 기본 템플릿(`config.init.json`)과 로컬 사용자 설정(`config.json`) 분리 운용
+* **내장 기본값 기반 자동 설정**: `config.json` 부재 시 코드 내장 기본 템플릿을 기반으로 자동 생성
 * **무중단 자가 복구**: 설정 파일이 손상되거나 삭제되어도 내장 기본값으로 자동 재생성
 
 ---
@@ -64,6 +64,6 @@
   ```
 * **단일 실행 파일(`.exe`) 빌드**:
   ```bash
-  python -m PyInstaller --clean --noconsole --onefile --paths="." --icon="assets/icon.ico" --name="EasyTagger" --add-data="assets;assets" --add-data="config.init.json;." main.py
+  python -m PyInstaller --clean --noconsole --onefile --paths="." --icon="assets/icon.ico" --name="EasyTagger" --add-data="assets;assets" main.py
   # 또는 build.bat 실행 (dist/EasyTagger.exe 생성)
   ```

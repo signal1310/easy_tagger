@@ -1,4 +1,12 @@
+import os
 from typing import Dict
+
+from src.core.paths import get_resource_path
+
+
+def _get_icon_url(filename: str) -> str:
+    return get_resource_path(os.path.join("assets", "icons", filename)).replace("\\", "/")
+
 
 _PALETTES: Dict[str, Dict[str, str]] = {
     "dark": {
@@ -14,7 +22,12 @@ _PALETTES: Dict[str, Dict[str, str]] = {
         "dlg_bg": "#1f1f23", "lbl_fg": "#d4d4d4", "lbl_weight": "500",
         "input_bg": "#2a2a30", "input_fg": "#ffffff", "border": "#3f3f48", "focus_border": "#6366f1",
         "group_border": "#34343a", "group_fg": "#a1a1aa",
-        "btn_bg": "#2a2a30", "btn_hover": "#34343c", "save_hover": "#3b82f6",
+        "btn_bg": "#2a2a30", "btn_hover": "#34343c", "btn_pressed": "#222228",
+        "btn_disabled_fg": "#55555c", "btn_disabled_bg": "#1c1c20",
+        "arrow_down": _get_icon_url("chevron-down-dark.svg"),
+        "arrow_up": _get_icon_url("chevron-up-dark.svg"),
+        "spin_btn_hover": "rgba(255, 255, 255, 0.08)",
+        "save_hover": "#3b82f6",
         "tip_bg": "#26262a", "tip_fg": "#ededed", "tip_border": "#3f3f48",
     },
     "light": {
@@ -30,7 +43,12 @@ _PALETTES: Dict[str, Dict[str, str]] = {
         "dlg_bg": "#ffffff", "lbl_fg": "#27272a", "lbl_weight": "600",
         "input_bg": "#fcfcfc", "input_fg": "#18181b", "border": "#d4d4d8", "focus_border": "#2563eb",
         "group_border": "#e4e4e7", "group_fg": "#52525b",
-        "btn_bg": "#f4f4f5", "btn_hover": "#e4e4e7", "save_hover": "#1d4ed8",
+        "btn_bg": "#f4f4f5", "btn_hover": "#e4e4e7", "btn_pressed": "#d4d4d8",
+        "btn_disabled_fg": "#a1a1aa", "btn_disabled_bg": "#f4f4f5",
+        "arrow_down": _get_icon_url("chevron-down-light.svg"),
+        "arrow_up": _get_icon_url("chevron-up-light.svg"),
+        "spin_btn_hover": "rgba(0, 0, 0, 0.06)",
+        "save_hover": "#1d4ed8",
         "tip_bg": "#ffffff", "tip_fg": "#18181b", "tip_border": "#d4d4d8",
     },
 }
@@ -97,12 +115,23 @@ def get_main_qss(effective_theme: str) -> str:
         QPushButton#btnGroupAdd:hover {{ background-color: {p['gadd_hover']}; }}
         QComboBox {{
             background-color: {p['combo_bg']}; border: 1px solid {p['combo_border']};
-            border-radius: 6px; padding: 5px 12px; color: {p['fg']}; font-size: 13px; font-weight: 500;
+            border-radius: 6px; padding: 5px 28px 5px 12px; color: {p['fg']}; font-size: 13px; font-weight: 500;
+        }}
+        QComboBox:hover {{ border-color: {p['focus_border']}; }}
+        QComboBox:focus {{ border-color: {p['focus_border']}; }}
+        QComboBox::drop-down {{
+            subcontrol-origin: padding; subcontrol-position: top right;
+            width: 24px; border: none; background: transparent;
+        }}
+        QComboBox::down-arrow {{
+            image: url("{p['arrow_down']}");
+            width: 12px; height: 12px;
+            margin-right: 6px;
         }}
         QComboBox QAbstractItemView {{
             background-color: {p['combo_bg']}; color: {p['fg']};
             selection-background-color: {p['combo_sel_bg']}; selection-color: {p['combo_sel_fg']};
-            border: 1px solid {p['combo_border']}; padding: 4px;
+            border: 1px solid {p['combo_border']}; border-radius: 6px; padding: 4px; outline: none;
         }}
     """
     return base + "\n" + get_tooltip_qss(effective_theme)
@@ -113,24 +142,61 @@ def get_context_menu_qss(effective_theme: str) -> str:
     return f"""
         QMenu {{
             background-color: {p['menu_bg']}; color: {p['fg']};
-            border: 1px solid {p['menu_border']}; border-radius: 6px; padding: 4px; font-size: 13px;
+            border: 1px solid {p['menu_border']}; border-radius: 8px;
+            padding: 6px 4px; font-size: 13px;
         }}
-        QMenu::item {{ padding: 6px 20px 6px 12px; border-radius: 4px; }}
-        QMenu::item:selected {{ background-color: {p['menu_sel_bg']}; color: {p['menu_sel_fg']}; }}
-        QMenu::separator {{ height: 1px; background: {p['menu_sep']}; margin: 4px 6px; }}
+        QMenu::item {{
+            padding: 6px 20px 6px 10px; border-radius: 5px; margin: 1px 3px;
+        }}
+        QMenu::item:selected {{
+            background-color: {p['menu_sel_bg']}; color: {p['menu_sel_fg']};
+        }}
+        QMenu::icon {{
+            padding-left: 10px; margin-right: 6px;
+        }}
+        QMenu::separator {{
+            height: 1px; background: {p['menu_sep']}; margin: 4px 6px;
+        }}
     """
 
 
 def get_dialog_qss(effective_theme: str) -> str:
     p = _PALETTES["dark" if effective_theme == "dark" else "light"]
     base = f"""
-        QDialog {{ background-color: {p['dlg_bg']}; color: {p['fg']}; }}
+        QDialog {{ background-color: {p['dlg_bg']}; color: {p['fg']}; font-family: 'Segoe UI', 'Malgun Gothic', -apple-system, sans-serif; }}
         QLabel {{ color: {p['lbl_fg']}; font-size: 13px; font-weight: {p['lbl_weight']}; }}
-        QLineEdit, QSpinBox {{
+        QLineEdit {{
             background-color: {p['input_bg']}; border: 1px solid {p['border']};
             border-radius: 6px; padding: 6px 10px; color: {p['input_fg']}; font-size: 13px;
         }}
-        QLineEdit:focus, QSpinBox:focus {{ border-color: {p['focus_border']}; }}
+        QLineEdit:focus {{ border-color: {p['focus_border']}; }}
+        QSpinBox {{
+            background-color: {p['input_bg']}; border: 1px solid {p['border']};
+            border-radius: 6px; padding: 5px 24px 5px 10px; color: {p['input_fg']}; font-size: 13px;
+            min-height: 20px;
+        }}
+        QSpinBox:hover {{ border-color: {p['focus_border']}; }}
+        QSpinBox:focus {{ border-color: {p['focus_border']}; }}
+        QSpinBox::up-button {{
+            subcontrol-origin: border; subcontrol-position: top right;
+            width: 18px; border: none; background: transparent;
+            border-top-right-radius: 5px; margin-right: 2px; margin-top: 2px;
+        }}
+        QSpinBox::up-button:hover {{ background-color: {p['spin_btn_hover']}; }}
+        QSpinBox::up-arrow {{
+            image: url("{p['arrow_up']}");
+            width: 10px; height: 10px;
+        }}
+        QSpinBox::down-button {{
+            subcontrol-origin: border; subcontrol-position: bottom right;
+            width: 18px; border: none; background: transparent;
+            border-bottom-right-radius: 5px; margin-right: 2px; margin-bottom: 2px;
+        }}
+        QSpinBox::down-button:hover {{ background-color: {p['spin_btn_hover']}; }}
+        QSpinBox::down-arrow {{
+            image: url("{p['arrow_down']}");
+            width: 10px; height: 10px;
+        }}
         QGroupBox {{
             border: 1px solid {p['group_border']}; border-radius: 8px;
             margin-top: 10px; padding-top: 14px; font-weight: 600; color: {p['group_fg']};
@@ -138,12 +204,35 @@ def get_dialog_qss(effective_theme: str) -> str:
         QGroupBox::title {{ subcontrol-origin: margin; left: 10px; padding: 0 4px; }}
         QRadioButton, QCheckBox {{ color: {p['fg']}; font-size: 13px; }}
         QComboBox {{
-            background-color: {p['combo_bg']}; border: 1px solid {p['border']};
-            border-radius: 6px; padding: 6px 10px; color: {p['input_fg']}; font-size: 13px;
+            background-color: {p['input_bg']}; border: 1px solid {p['border']};
+            border-radius: 6px; padding: 6px 28px 6px 12px; color: {p['input_fg']}; font-size: 13px;
+            min-height: 20px;
+        }}
+        QComboBox:hover {{ border-color: {p['focus_border']}; }}
+        QComboBox:focus {{ border-color: {p['focus_border']}; }}
+        QComboBox::drop-down {{
+            subcontrol-origin: padding; subcontrol-position: top right;
+            width: 24px; border: none; background: transparent;
+        }}
+        QComboBox::down-arrow {{
+            image: url("{p['arrow_down']}");
+            width: 12px; height: 12px;
+            margin-right: 6px;
         }}
         QComboBox QAbstractItemView {{
-            background-color: {p['combo_bg']}; color: {p['input_fg']};
-            selection-background-color: {p['combo_sel_bg']}; border: 1px solid {p['border']};
+            background-color: {p['dlg_bg']}; color: {p['input_fg']};
+            selection-background-color: {p['combo_sel_bg']}; selection-color: {p['combo_sel_fg']};
+            border: 1px solid {p['border']}; border-radius: 6px; padding: 4px; outline: none;
+        }}
+        QPushButton {{
+            background-color: {p['btn_bg']}; color: {p['fg']};
+            border: 1px solid {p['border']}; border-radius: 6px; padding: 6px 14px;
+            font-size: 13px; font-weight: 500;
+        }}
+        QPushButton:hover {{ background-color: {p['btn_hover']}; border-color: {p['focus_border']}; }}
+        QPushButton:pressed {{ background-color: {p['btn_pressed']}; }}
+        QPushButton:disabled {{
+            color: {p['btn_disabled_fg']}; background-color: {p['btn_disabled_bg']}; border-color: {p['border']};
         }}
         QPushButton#btnSecondary {{
             background-color: {p['btn_bg']}; color: {p['fg']};

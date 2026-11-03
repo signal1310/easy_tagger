@@ -59,7 +59,7 @@ flowchart TD
 * **`defaults.py`**: 버전 정보, 파스텔 프리셋 팔레트, 초기 템플릿 기본값 정의
 * **`tag_parser.py`**: 일반 태그, 고정 속성 태그(`-key val`), 입력형 속성 태그(`-key ?`) 문법 파싱 및 판별
 * **`filename_builder.py`**: 파일명에서 태그 추출, prefix/suffix 및 merged/separate 형식 파일명 조립
-* **`config_manager.py`**: `config.json` 로드/저장, `config.init.json` 부재 시 자동 복구(Self-Healing), 구버전 마이그레이션
+* **`config_manager.py`**: `config.json` 로드/저장, 설정 파일 부재 시 내장 기본값 자동 생성 및 구버전 마이그레이션
 
 ### ② 서비스 계층 (`src/services/`) — 비즈니스 및 파일시스템 연산
 * **`file_rename_service.py`**: 다중 파일 일괄 태그 추가/제거 실행, 동일 파일명 충돌 및 파일 부재 에러 처리

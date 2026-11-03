@@ -4,29 +4,14 @@ import os
 import uuid
 from typing import Any, Dict, Optional
 
-from src.core.defaults import get_fallback_template_data
-from src.core.paths import CONFIG_FILE, get_init_config_path
+from src.core.defaults import get_default_config
+from src.core.paths import CONFIG_FILE
 from src.core.tag_parser import parse_tag_definition
 
 
-def load_default_config(init_path: Optional[str] = None) -> Dict[str, Any]:
-    """Loads default configuration from config.init.json, automatically recreating it if missing."""
-    resolved_init_path = get_init_config_path(init_path)
-    if os.path.exists(resolved_init_path):
-        try:
-            with open(resolved_init_path, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception as e:
-            print(f"Error reading {resolved_init_path}: {e}")
-
-    # Self-healing: if config.init.json is missing or corrupted, recreate it automatically
-    fallback = get_fallback_template_data()
-    try:
-        with open(resolved_init_path, "w", encoding="utf-8") as f:
-            json.dump(fallback, f, ensure_ascii=False, indent=2)
-    except Exception as e:
-        print(f"Error recreating {resolved_init_path}: {e}")
-    return fallback
+def load_default_config() -> Dict[str, Any]:
+    """Returns a deep copy of the built-in default application configuration."""
+    return copy.deepcopy(get_default_config())
 
 
 def normalize_tag_data(btn: Dict[str, Any]) -> Dict[str, Any]:

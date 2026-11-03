@@ -20,8 +20,8 @@ PRESET_COLORS: List[Tuple[str, str]] = [
 ]
 
 
-def get_fallback_template_data() -> Dict[str, Any]:
-    """Fallback starter configuration if config.init.json is deleted or not found."""
+def get_default_config() -> Dict[str, Any]:
+    """Built-in default starter configuration used to initialize config.json when missing."""
     return {
         "theme": "system",
         "position": "suffix",
@@ -101,4 +101,8 @@ def get_fallback_template_data() -> Dict[str, Any]:
             },
         ],
     }
+
+
+# Backward-compatible alias
+get_fallback_template_data = get_default_config
 

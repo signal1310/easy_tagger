@@ -26,17 +26,23 @@ class PastelColorPicker(QGroupBox):
 
     colorSelected = pyqtSignal(str)
 
-    def __init__(self, initial_color: str = "#bae6fd", parent=None):
+    def __init__(self, initial_color: str = "#bae6fd", effective_theme: str = "dark", parent=None):
         super().__init__("버튼 파스텔 색상", parent)
+        self.effective_theme = effective_theme
         self._current_color = initial_color
         layout = QHBoxLayout(self)
         layout.addWidget(QLabel("파스텔 프리셋:"))
 
+        border_color = "rgba(255, 255, 255, 0.2)" if effective_theme == "dark" else "rgba(0, 0, 0, 0.15)"
+        hover_border = "#93c5fd" if effective_theme == "dark" else "#2563eb"
         for hex_code, name in PRESET_COLORS:
             btn = QPushButton()
             btn.setFixedSize(22, 22)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            disp_color, _ = ThemeManager.adapt_color_for_theme(hex_code, self.effective_theme)
             btn.setStyleSheet(
-                f"background-color: {hex_code}; border-radius: 11px; border: 1px solid rgba(0,0,0,0.15);"
+                f"QPushButton {{ background-color: {disp_color}; border-radius: 11px; border: 1px solid {border_color}; }}"
+                f"QPushButton:hover {{ border: 2px solid {hover_border}; }}"
             )
             btn.setToolTip(name)
             btn.clicked.connect(lambda _, c=hex_code: self._emit_color(c))
@@ -56,9 +62,15 @@ class PastelColorPicker(QGroupBox):
         self.colorSelected.emit(hex_code)
 
     def _pick_custom_color(self) -> None:
-        picked = QColorDialog.getColor(QColor(self._current_color), self, "배경색 선택")
-        if picked.isValid():
-            self._emit_color(picked.name())
+        dlg = QColorDialog(QColor(self._current_color), self)
+        dlg.setWindowTitle("배경색 선택")
+        dlg.setOption(QColorDialog.ColorDialogOption.DontUseNativeDialog, True)
+        dlg.setStyleSheet(ThemeManager.get_dialog_style(self.effective_theme))
+        ThemeManager.apply_titlebar_theme(dlg, self.effective_theme)
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            picked = dlg.selectedColor()
+            if picked.isValid():
+                self._emit_color(picked.name())
 
 
 class TagDialog(QDialog):
@@ -122,7 +134,9 @@ class TagDialog(QDialog):
         form.addRow(self.lbl_detected_type)
         main_layout.addWidget(form_group)
 
-        self.color_picker = PastelColorPicker(self.data.get("bg_color", "#bae6fd"), self)
+        self.color_picker = PastelColorPicker(
+            self.data.get("bg_color", "#bae6fd"), effective_theme=self.effective_theme, parent=self
+        )
         self.color_picker.colorSelected.connect(self._set_color)
         self.btn_custom_color = self.color_picker.btn_custom_color
         main_layout.addWidget(self.color_picker)

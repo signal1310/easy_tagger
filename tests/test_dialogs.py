@@ -4,7 +4,7 @@ from tests import get_qapp
 
 get_qapp()
 
-from PyQt6.QtWidgets import QLabel, QMessageBox
+from PyQt6.QtWidgets import QLabel, QMessageBox, QPushButton
 
 from src.core.defaults import APP_NAME, APP_VERSION
 from src.ui.dialogs.group_dialog import GroupDialog
@@ -56,6 +56,12 @@ class TestDialogs(unittest.TestCase):
         self.assertEqual(saved_prompt["param_val_mode"], "prompt")
         self.assertEqual(saved_prompt["param_val"], "")
 
+        # Dark theme preset color adaptation
+        dark_tag_dlg = TagDialog(effective_theme="dark")
+        swatches = [b for b in dark_tag_dlg.color_picker.findChildren(QPushButton) if b.objectName() != "btnSecondary"]
+        self.assertGreaterEqual(len(swatches), 9)
+        self.assertIn("#0d5477", swatches[0].styleSheet())
+
     def test_settings_and_help_dialogs_titles_and_version(self):
         cfg = {
             "theme": "dark",
@@ -91,6 +97,7 @@ class TestDialogs(unittest.TestCase):
     def test_group_prompt_and_message_box_dialogs(self):
         g_dlg = GroupDialog(title="그룹 이름 변경", initial_name="기존그룹", effective_theme="dark")
         self.assertEqual(g_dlg.get_group_name(), "기존그룹")
+        self.assertEqual(g_dlg.edit_name.placeholderText(), "")
         # Empty input should be ignored and preserve previous valid group_name
         g_dlg.edit_name.setText("   ")
         g_dlg._save_and_accept()

@@ -51,7 +51,6 @@ class GroupDialog(QDialog):
         form.setSpacing(10)
 
         self.edit_name = QLineEdit()
-        self.edit_name.setPlaceholderText("그룹 이름 (예: 기본 태그, 속성 / 스펙)")
         self.edit_name.setText(self.group_name)
         self.edit_name.returnPressed.connect(self._save_and_accept)
         form.addRow("그룹 이름:", self.edit_name)

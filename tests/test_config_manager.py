@@ -10,7 +10,7 @@ from src.core.config_manager import (
     normalize_tag_data,
     save_config,
 )
-from src.core.paths import BASE_DIR, get_init_config_path, get_resource_path
+from src.core.paths import BASE_DIR, get_resource_path
 
 
 class TestConfigManager(unittest.TestCase):
@@ -19,19 +19,20 @@ class TestConfigManager(unittest.TestCase):
         self.assertTrue(os.path.exists(icon_path))
         self.assertTrue(os.path.exists(os.path.join(BASE_DIR, "main.py")))
 
-    def test_config_init_self_healing_when_missing_or_corrupt(self):
-        with tempfile.TemporaryDirectory() as td:
-            missing_init = os.path.join(td, "missing.init.json")
-            self.assertEqual(get_init_config_path(missing_init), os.path.abspath(missing_init))
-            cfg = load_default_config(init_path=missing_init)
-            self.assertTrue(os.path.exists(missing_init))
-            self.assertGreaterEqual(len(cfg.get("groups", [])), 2)
+    def test_load_default_config_builtin(self):
+        cfg = load_default_config()
+        self.assertIn("groups", cfg)
+        self.assertGreaterEqual(len(cfg["groups"]), 2)
+        self.assertIn("theme", cfg)
 
-            # Corrupt the init file and verify self-healing recovery
-            with open(missing_init, "w", encoding="utf-8") as f:
-                f.write("{invalid_json")
-            recovered = load_default_config(init_path=missing_init)
-            self.assertGreaterEqual(len(recovered.get("groups", [])), 2)
+    def test_config_json_created_from_builtin_defaults_when_missing(self):
+        with tempfile.TemporaryDirectory() as td:
+            missing_cfg = os.path.join(td, "config.json")
+            self.assertFalse(os.path.exists(missing_cfg))
+            loaded = load_config(missing_cfg)
+            self.assertTrue(os.path.exists(missing_cfg))
+            self.assertGreaterEqual(len(loaded.get("groups", [])), 2)
+            self.assertEqual(loaded.get("theme"), "system")
 
     def test_normalize_tag_data_strips_redundant_keys(self):
         legacy = {
