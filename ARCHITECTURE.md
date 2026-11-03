@@ -1,90 +1,112 @@
-# Easy Tagger 코드 구조 및 아키텍처 요약
+# Easy Tagger 아키텍처 및 모듈 설계
 
-## 1. 전체 아키텍처 개요
+## 1. 핵심 설계 원칙
 
-Easy Tagger는 **PyQt6** 기반의 데스크톱 애플리케이션으로, 역할에 따라 **4개 계층(UI 컨트롤러 · 커스텀 위젯 · 다이얼로그 · 코어 로직/상태 관리)**으로 분리되어 있습니다.
+* **단일 책임 원칙 (SRP)**: 도메인 파서, 파일 조립기, 파일시스템 변경기, 실행 취소 스택, 그룹 모델, UI 컨트롤러, 뷰 위젯이 각 1개의 명확한 책임을 전담
+* **높은 응집도 (High Cohesion)**: 위젯과 해당 위젯 전용의 스타일 계산·헤더 프레임은 위젯 모듈 내부에 캡슐화하여 관련 로직 파악 및 유지보수 용이성 확보
+* **의존성 역전 및 계층 격리 (DIP)**: `src/core/`와 `src/services/`는 `PyQt6` GUI에 전혀 의존하지 않는 순수 도메인 계층으로 구현하여 헤드리스 단위 테스트 가능
+* **경량 모듈화**: 모든 파이썬 파일이 70~250줄 내외의 적정 규모를 유지하며, 불필요한 간접 참조(Indirection) 방지
+
+---
+
+## 2. 계층형 아키텍처 다이어그램
 
 ```mermaid
 flowchart TD
-    main["main.py (진입점)"] --> MW["main_window.py (MainWindow)"]
+    Entry["main.py (앱 진입점)"] --> MW["src/ui/main_window.py (MainWindow)"]
 
-    subgraph Widgets["커스텀 UI 위젯"]
-        GW["group_widget.py (GroupWidget)"]
-        TB["tag_button.py (TagButton)"]
-        FL["flow_layout.py (FlowLayout)"]
-        GW --> FL
-        FL --> TB
+    subgraph Controllers["UI 컨트롤러 계층 (src/ui/controllers)"]
+        FC["file_controller.py (FileController)"]
+        GC["group_controller.py (GroupController)"]
     end
 
-    subgraph Dialogs["다이얼로그 계층"]
-        TD["tag_dialog.py (TagDialog)"]
-        SD["settings_dialog.py (SettingsDialog)"]
-        DU["dialog_utils.py (GroupDialog / ThemedPromptDialog / ThemedMessageBox)"]
+    subgraph Views["프레젠테이션 계층 (src/ui)"]
+        W["widgets/ (ActionBar, GroupWidget, TagButton, FlowLayout)"]
+        D["dialogs/ (TagDialog, SettingsDialog, HelpDialog, GroupDialog, Prompt, MessageBox)"]
+        S["styles/ (ThemeManager, palette_utils, qss_templates)"]
+        I["icons/ (icon_factory, svg_data)"]
     end
 
-    subgraph Core["코어 파서 · 설정 · 테마"]
-        TP["tag_parser.py (태그 파싱·조립·판별)"]
-        CM["config_manager.py (config.json 입출력·정규화)"]
-        TM["theme_manager.py (ThemeManager & Windows DWM)"]
+    subgraph Services["애플리케이션 서비스 계층 (src/services)"]
+        FRS["file_rename_service.py (배치 파일명 변경 및 충돌 방어)"]
+        US["undo_service.py (UndoStack 및 롤백)"]
+        GMS["group_model_service.py (그룹/태그 CRUD 및 트리 조작)"]
+        TDS["tag_detection_service.py (미등록 태그 추출)"]
     end
 
-    MW --> Widgets
-    MW --> Dialogs
-    MW --> Core
-    Widgets --> TP
-    Widgets --> TM
-    Dialogs --> TP
-    Dialogs --> TM
-    CM --> TP
+    subgraph Core["코어 도메인 계층 (src/core)"]
+        TP["tag_parser.py (태그 문법 파싱)"]
+        FB["filename_builder.py (대괄호 치환 및 파일명 조립)"]
+        CM["config_manager.py (설정 입출력 및 자가 복구)"]
+        DF["defaults.py / paths.py (상수 및 경로 해석)"]
+    end
+
+    MW --> Controllers
+    MW --> Views
+    Controllers --> Services
+    Controllers --> D
+    Views --> S
+    Views --> I
+    Services --> Core
 ```
 
 ---
 
-## 2. 모듈별 역할 및 핵심 구성요소
+## 3. 모듈별 역할 및 책임 목록
 
-### ① 진입점 및 메인 컨트롤러
-| 파일 | 핵심 클래스/함수 | 주요 역할 |
-| :--- | :--- | :--- |
-| [`main.py`](main.py) | `main()` | `QApplication` 생성 및 `MainWindow` 실행 |
-| [`main_window.py`](main_window.py) | `MainWindow` | 전체 상태 총괄 컨트롤러<br>• 단일/다중 활성 파일 관리 (`active_file_paths`)<br>• 파일 드롭 태깅 (`_apply_tag_to_files`) 및 버튼 클릭 일괄 토글 (`_on_tag_button_clicked`)<br>• 미등록 태그 자동 감지 및 `감지된 태그` 그룹 등록 (`_detect_and_register_tags_from_files`)<br>• `Ctrl` + 드래그 기반 그룹/태그 순서 변경 및 그룹 간 이동<br>• 다중 파일 배치 단위 실행 취소 (`undo_stack`, `undo_last_action`) |
+### ① 코어 계층 (`src/core/`) — Qt 비의존 순수 도메인
+* **`paths.py`**: 개발 환경 및 `PyInstaller` 번들 환경(`_MEIPASS`) 리소스 경로 해석
+* **`defaults.py`**: 버전 정보, 파스텔 프리셋 팔레트, 초기 템플릿 기본값 정의
+* **`tag_parser.py`**: 일반 태그, 고정 속성 태그(`-key val`), 입력형 속성 태그(`-key ?`) 문법 파싱 및 판별
+* **`filename_builder.py`**: 파일명에서 태그 추출, prefix/suffix 및 merged/separate 형식 파일명 조립
+* **`config_manager.py`**: `config.json` 로드/저장, `config.init.json` 부재 시 자동 복구(Self-Healing), 구버전 마이그레이션
 
-### ② 커스텀 위젯 & 레이아웃
-| 파일 | 핵심 클래스 | 주요 역할 |
-| :--- | :--- | :--- |
-| [`group_widget.py`](group_widget.py) | `GroupWidget`, `GroupHeader` | 그룹 카드 컨테이너<br>• 헤더 클릭으로 접기/펼치기 (`▼` / `▲`) 및 `+` 버튼으로 태그 추가<br>• `Ctrl` + 헤더 드래그로 그룹 순서 변경 (`MIME_GROUP`)<br>• 다른 그룹에서 드래그된 태그 드롭 수신 (`MIME_TAG`) |
-| [`tag_button.py`](tag_button.py) | `TagButton` | 개별 태그 버튼<br>• 외부 탐색기 파일 드롭 수신 (`filesDropped` 시그널)<br>• `Ctrl` + 드래그로 태그 순서/그룹 이동 (`tagReorderRequested` 시그널)<br>• 활성 파일 상태에 따른 4단계 렌더링 (`none`, `on` `✓`, `partial` `◐`, `off`) |
-| [`flow_layout.py`](flow_layout.py) | `FlowLayout` | 창 가로폭에 맞춰 태그 버튼들을 자동으로 줄바꿈 배치하는 커스텀 `QLayout` |
+### ② 서비스 계층 (`src/services/`) — 비즈니스 및 파일시스템 연산
+* **`file_rename_service.py`**: 다중 파일 일괄 태그 추가/제거 실행, 동일 파일명 충돌 및 파일 부재 에러 처리
+* **`undo_service.py`**: 배치 단위 작업 이력 스택 관리 및 원본 파일명 롤백 처리
+* **`group_model_service.py`**: 그룹 및 태그의 인메모리 생성, 수정, 복제, 삭제, 순서 변경, 그룹 간 이동 연산
+* **`tag_detection_service.py`**: 파일명에 포함된 미등록 태그 감지 및 휘발성 `감지된 태그` 그룹 생성
 
-### ③ 다이얼로그 계층
-| 파일 | 핵심 클래스 | 주요 역할 |
-| :--- | :--- | :--- |
-| [`tag_dialog.py`](tag_dialog.py) | `TagDialog` | 태그 추가/수정 창<br>• 단일 `태그 이름` 입력칸에서 일반(`여행`), 고정 속성(`-fps 60`), 입력형 속성(`-score ?`) 실시간 판별<br>• 파스텔 프리셋/커스텀 색상 선택 및 실시간 버튼·툴팁 미리보기 |
-| [`settings_dialog.py`](settings_dialog.py) | `SettingsDialog` | 전역 환경 설정 창 (테마, 태그 위치 `prefix`/`suffix`, 묶음 방식 `merged`/`separate`, 버튼 높이, 항상 위에 고정) |
-| [`dialog_utils.py`](dialog_utils.py) | `GroupDialog`<br>`ThemedPromptDialog`<br>`ThemedMessageBox` | 앱 테마 및 Windows 네이티브 타이틀바 색상이 동기화된 공용 대화상자 모음<br>• 창 표시 직후 입력칸 자동 포커싱 및 `Enter` 키 즉시 제출 지원 |
-
-### ④ 코어 로직 (파서 · 설정 · 테마)
-| 파일 | 핵심 클래스/함수 | 주요 역할 |
-| :--- | :--- | :--- |
-| [`tag_parser.py`](tag_parser.py) | `parse_tag_definition()`<br>`extract_tags_and_base()`<br>`assemble_filename()`<br>`apply_tag_to_tags_list()`<br>`remove_tag_from_tags_list()`<br>`is_tag_in_tags()` | 파일명 및 태그 문자열 처리 순수 함수 모듈<br>• 태그 정의 문자열을 분석해 `normal` / `param`(`fixed`·`prompt`) 스펙으로 정규화<br>• 파일명에서 `[...]` 태그 블록과 순수 파일명 분리·재조립<br>• 속성 태그(`-키 값`) 적용 시 동일 `-키`의 기존 값 교체 |
-| [`config_manager.py`](config_manager.py) | `load_config()`<br>`save_config()`<br>`normalize_tag_data()` | `config.json` 영구 저장 및 `config.init.json` 기본 템플릿 로드<br>• `config.json` 부재 시 `config.init.json` 기본 템플릿으로부터 자동 생성<br>• 재시작 시 `감지된 태그` 그룹 자동 삭제 및 모든 버튼 데이터 정규화 |
-| [`theme_manager.py`](theme_manager.py) | `ThemeManager` | 다크 / 라이트 / 시스템 테마 스타일시트(QSS) 및 색상 계산<br>• 다크 모드 시 밝은 파스텔 버튼 색상을 눈부심 없는 뮤트 톤으로 자동 보정 (`adapt_color_for_theme`)<br>• Windows DWM API(`DwmSetWindowAttribute`)를 통한 네이티브 창틀 색상 동기화 (`apply_titlebar_theme`) |
-| [`icon_factory.py`](icon_factory.py) | `get_icon()`<br>`get_pixmap()` | 모던 벡터 SVG 아이콘 팩토리<br>• Lucide 기반 클린 벡터 그래픽 렌더링 및 테마/색상/해상도별 자동 캐싱<br>• 이모지를 완전히 대체하여 네이티브 툴바 및 메뉴에 일관된 모던 UI 제공 |
-
-### ⑤ 테스트 코드
-| 파일 | 테스트 대상 |
-| :--- | :--- |
-| [`test_tag_parser.py`](test_tag_parser.py) | `tag_parser.py`의 태그 추출, 병합/개별 조립, 속성 태그 덮어쓰기 및 삭제 단위 테스트 |
-| [`test_app_workflow.py`](test_app_workflow.py) | 단일/다중 파일 태깅 및 토글, 미등록 태그 자동 감지, 그룹/태그 드래그 이동, 다이얼로그, 설정 영구 저장 통합 테스트 |
+### ③ UI 계층 (`src/ui/`) — PyQt6 프레젠테이션
+* **`icons/`**:
+  * `svg_data.py`: Lucide 기반 인메모리 벡터 SVG 정의
+  * `icon_factory.py`: HiDPI 다중 배율 래스터화 및 테마별 QIcon/QPixmap 캐싱
+* **`styles/`**:
+  * `palette_utils.py`: 휘도 기반 대비 텍스트 색상 계산, 다크모드 파스텔 톤다운, Windows DWM 타이틀바 색상 동기화
+  * `qss_templates.py`: 메인 창, 대화상자, 툴팁, 콤보박스 통합 QSS 템플릿
+  * `theme_manager.py`: 테마 적용 총괄 파사드
+* **`widgets/`**:
+  * `action_bar.py`: 활성 파일 상태바, 파일 편집 닫기, 새 그룹 버튼, 햄버거 드롭다운 메뉴
+  * `group_widget.py`: 접기/펼치기 헤더 프레임, 태그 FlowLayout 컨테이너, Ctrl+드래그 그룹 재정렬
+  * `tag_button.py`: 태그 버튼 뷰, 3단계 활성 상태 렌더링, 폰트 매트릭스 기반 동적 너비 계산, 탐색기 파일 드롭 수신
+  * `flow_layout.py`: 창 너비에 맞춘 가로 자동 줄바꿈 커스텀 `QLayout`
+* **`dialogs/`**:
+  * `tag_dialog.py`: 통합 태그 입력 및 파스텔 색상 피커(`PastelColorPicker`) 내장 대화상자
+  * `settings_dialog.py`: 테마, 태그 위치, 괄호 스타일, 버튼 높이, 상단 고정 설정
+  * `help_dialog.py`: 마우스 제스처, 단축키, 속성 태그 안내
+  * `group_dialog.py`, `prompt_dialog.py`, `message_box.py`: 테마가 동기화된 입력/확인 대화상자
+* **`controllers/`**:
+  * `file_controller.py`: 활성 파일 추적, 버튼 클릭 시 일괄 토글/적용, 실행 취소 제어
+  * `group_controller.py`: 그룹/태그 CRUD 대화상자 연동 및 드래그 재정렬 제어
+* **`main_window.py`**:
+  * 최상위 윈도우 셸, 단축키 배선, 윈도우 크기/위치 영속화, 이벤트 라우팅
 
 ---
 
-## 3. 핵심 데이터 흐름 (Data Flow)
+## 4. 데이터 및 이벤트 흐름 (Data Flow)
 
-1. **파일 드롭 / 선택 흐름**:
-   * **창 빈 공간 드롭**: `MainWindow.dropEvent` ➔ `_set_active_files(paths)` ➔ `_detect_and_register_tags_from_files` (미등록 태그 자동 추가) ➔ `_update_tag_buttons_highlight` (각 버튼을 `on` / `partial` / `off` 상태로 갱신)
-   * **태그 버튼 위 드롭**: `TagButton.dropEvent` ➔ `filesDropped` 시그널 ➔ `MainWindow._on_files_dropped_on_button` ➔ `_resolve_tag_to_apply` (`-키 ?`인 경우 `ThemedPromptDialog` 호출) ➔ `_apply_tag_to_files` (파일명 일괄 변경 + `undo_stack` 기록 + 전체 파일을 활성 목록으로 유지)
-
-2. **태그 버튼 클릭(토글) 흐름**:
-   * `MainWindow._on_tag_button_clicked`에서 현재 활성 파일들(`active_file_paths`)에 해당 태그가 모두 있는지(`all_have_tag`) 검사
-   * **모두 적용된 상태(`on`)**: 모든 활성 파일에서 해당 태그(속성 태그는 해당 `-키`)를 일괄 제거하고 `off`로 전환
-   * **미적용(`off`) 또는 일부 적용(`partial`)**: 모든 활성 파일에 해당 태그를 일괄 추가하고 `on`으로 전환
+* **파일 드롭 및 로드 흐름**:
+  1. 외부 탐색기 파일이 창 빈 공간에 드롭 (`MainWindow.dropEvent`)
+  2. `FileController.set_active_files()` 호출 및 유효 파일 경로 정규화
+  3. `detect_and_register_unknown_tags()` 실행 ➔ 미등록 태그 발견 시 최상단 `감지된 태그` 그룹 자동 등록
+  4. `update_highlights()` 호출 ➔ 모든 태그 버튼의 상태(`on` / `partial` / `off`) 및 상단바 텍스트 갱신
+* **태그 토글 클릭 흐름**:
+  1. 태그 버튼 클릭 (`TagButton.clicked`) ➔ `FileController.on_tag_button_clicked()`
+  2. 현재 활성 파일들의 태그 보유 상태 검사:
+     * **전체 보유(`on`)**: `remove_tag_batch()` 실행 ➔ 파일명에서 태그 일괄 제거 ➔ `UndoService.push()`
+     * **미보유(`off`) / 일부 보유(`partial`)**: `resolve_tag_to_apply()` (입력형 속성인 경우 `ThemedPromptDialog` 호출) ➔ `apply_tag_batch()` 실행 ➔ `UndoService.push()`
+  3. 변경된 파일 경로 목록으로 활성 파일 갱신 및 태그 상태 재동기화
+* **실행 취소 흐름**:
+  1. `Ctrl + Z` 또는 햄버거 메뉴에서 실행 취소 선택 ➔ `FileController.undo_last_action()`
+  2. `UndoService.undo_last()` 실행 ➔ 마지막 배치 단위의 이전 파일명으로 역순 롤백
+  3. 복원된 파일 경로를 다시 활성 파일로 등록하고 UI 상태 갱신

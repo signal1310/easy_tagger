@@ -1,13 +1,16 @@
 import os
 import sys
+
 from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QGuiApplication, QIcon
 from PyQt6.QtWidgets import QApplication
-from PyQt6.QtGui import QIcon, QGuiApplication
-from main_window import MainWindow
-from config_manager import get_resource_path
+
+from src.core.defaults import APP_NAME
+from src.core.paths import get_resource_path
+from src.ui.main_window import MainWindow
 
 
-def main():
+def main() -> None:
     # Enable fractional HiDPI scaling (125%, 150%, 175%) on Windows without blurry integer rounding
     if hasattr(Qt, "HighDpiScaleFactorRoundingPolicy"):
         QGuiApplication.setHighDpiScaleFactorRoundingPolicy(
@@ -18,12 +21,13 @@ def main():
     if sys.platform == "win32":
         try:
             import ctypes
+
             ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("easytagger.app.1.0")
         except Exception:
             pass
 
     app = QApplication(sys.argv)
-    app.setApplicationName("Easy Tagger")
+    app.setApplicationName(APP_NAME)
     app.setOrganizationName("EasyTagger")
 
     icon_ico = get_resource_path(os.path.join("assets", "icon.ico"))
@@ -41,4 +45,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
