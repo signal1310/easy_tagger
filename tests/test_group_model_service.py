@@ -74,6 +74,12 @@ class TestGroupModelService(unittest.TestCase):
         self.assertEqual([b["id"] for b in self.cfg["groups"][1]["buttons"]], ["t4", "t1"])
         self.assertIsNone(GroupModelService.move_tag_to_group(self.cfg, "t1", "g2"))  # same group no-op
 
+        # Reorder tag to index (both within and cross-group)
+        GroupModelService.reorder_tag_to_index(self.cfg, "t1", "g1", 0)
+        self.assertEqual([b["id"] for b in self.cfg["groups"][0]["buttons"]], ["t1", "t2", "t3"])
+        GroupModelService.reorder_tag_to_index(self.cfg, "t3", "g1", 1)
+        self.assertEqual([b["id"] for b in self.cfg["groups"][0]["buttons"]], ["t1", "t3", "t2"])
+
         # Reorder groups
         GroupModelService.reorder_group(self.cfg, "g2", "g1", "before")
         self.assertEqual([g["id"] for g in self.cfg["groups"]], ["g2", "g1"])

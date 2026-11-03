@@ -1,12 +1,13 @@
 import json
 import os
 
-from PyQt6.QtCore import QMimeData, QSize, Qt, pyqtSignal
-from PyQt6.QtGui import QColor, QDrag, QDragEnterEvent, QDragLeaveEvent, QDropEvent, QFont, QFontMetrics
-from PyQt6.QtWidgets import QApplication, QMenu, QPushButton
+from PyQt6.QtCore import QEvent, QMimeData, QPoint, QPropertyAnimation, QRect, QSize, Qt, pyqtSignal
+from PyQt6.QtGui import QColor, QCursor, QDrag, QDragEnterEvent, QDragLeaveEvent, QDropEvent, QFont, QFontMetrics
+from PyQt6.QtWidgets import QApplication, QFrame, QGraphicsOpacityEffect, QMenu, QPushButton, QToolTip
 
 from src.core.defaults import MIME_TAG
 from src.core.tag_parser import get_tag_name, parse_tag_definition
+from src.ui.animation import MotionConstants, MotionHelper
 from src.ui.icons import icon_factory
 from src.ui.styles.theme_manager import ThemeManager
 
@@ -49,9 +50,9 @@ def compute_tag_button_width(text: str, base_font: QFont, is_bold: bool = False)
 
 
 def compute_tag_button_qss(
-    bg_hex: str, effective_theme: str, tag_state: str = "none", is_drag_over: bool = False
+    bg_hex: str, effective_theme: str, tag_state: str = "none", is_drag_over: bool = False, is_live_dragging: bool = False
 ) -> str:
-    """Computes dynamic QSS for TagButton across states ('none', 'on', 'partial', 'off', drag_over)."""
+    """Computes dynamic QSS for TagButton across states ('none', 'on', 'partial', 'off', drag_over, live_dragging)."""
     adapted_bg, contrast_text = ThemeManager.adapt_color_for_theme(bg_hex, effective_theme)
     base_color = QColor(adapted_bg)
     is_dark = effective_theme == "dark"
@@ -61,6 +62,11 @@ def compute_tag_button_qss(
         bdr_c = base_color.lighter(165).name() if is_dark else base_color.darker(140).name()
         fg = "#ffffff" if is_dark else ThemeManager.get_contrast_text_color(bg)
         border, hover, pressed, weight = f"2px dashed {bdr_c}", bg, base_color.darker(115).name(), "700"
+    elif is_live_dragging:
+        bg, fg = adapted_bg, contrast_text
+        hover = base_color.lighter(118).name() if is_dark else base_color.darker(108).name()
+        pressed = base_color.darker(110).name() if is_dark else base_color.darker(118).name()
+        border, weight = "2px solid #38bdf8", "700"
     elif tag_state == "on":
         bg = base_color.lighter(138).name() if is_dark else base_color.darker(122).name()
         bdr_c = base_color.lighter(155).name() if is_dark else base_color.darker(135).name()
@@ -103,12 +109,37 @@ def compute_tag_button_qss(
     return style + "\n" + ThemeManager.get_tooltip_style(effective_theme)
 
 
+class TagPlaceholder(QFrame):
+    """Visual preview slot inserted into target groups during cross-group live drag."""
+
+    def __init__(self, size: QSize, bg_hex: str = "#bae6fd", effective_theme: str = "dark", parent=None):
+        super().__init__(parent)
+        self.setObjectName("tagPlaceholder")
+        self.setFixedSize(size)
+        self._is_live_dragging = True
+        is_dark = effective_theme == "dark"
+        adapted_bg, _ = ThemeManager.adapt_color_for_theme(bg_hex, effective_theme)
+        col = QColor(adapted_bg)
+        r, g, b = col.red(), col.green(), col.blue()
+        bg = f"rgba({r}, {g}, {b}, 0.22)" if is_dark else f"rgba({r}, {g}, {b}, 0.28)"
+        bdr = col.lighter(135).name() if is_dark else col.darker(120).name()
+        self.setStyleSheet(f"""
+            QFrame#tagPlaceholder {{
+                background-color: {bg};
+                border: 2px dashed {bdr};
+                border-radius: 8px;
+            }}
+        """)
+
+
 class TagButton(QPushButton):
     """
     Custom PushButton representing a tag.
     Accepts dragged files from Explorer, supports Ctrl + Drag reordering/moving across groups,
     and displays active/inactive highlights for edited files.
     """
+
+    _active_drag_tag = None
 
     filesDropped = pyqtSignal(dict, list)
     tagReorderRequested = pyqtSignal(str, str, str)
@@ -162,12 +193,13 @@ class TagButton(QPushButton):
         self.data.update(spec)
         display_label = format_display_label(spec["name"], self.tag_state)
         self.setText(display_label)
-        w = compute_tag_button_width(display_label, self.font(), is_bold=(self.tag_state == "on" or is_drag_over))
+        is_live = getattr(self, "_is_live_dragging", False)
+        w = compute_tag_button_width(display_label, self.font(), is_bold=(self.tag_state == "on" or is_drag_over or is_live))
         self.setFixedSize(w, self.fixed_height)
         self.updateGeometry()
         self.setToolTip(build_tag_tooltip(self.data.get("description", ""), self.tag_state))
         bg = self.data.get("bg_color", "#bae6fd")
-        self.setStyleSheet(compute_tag_button_qss(bg, self.effective_theme, self.tag_state, is_drag_over))
+        self.setStyleSheet(compute_tag_button_qss(bg, self.effective_theme, self.tag_state, is_drag_over, is_live))
 
     def mousePressEvent(self, event):
         is_ctrl_left = event.button() == Qt.MouseButton.LeftButton and bool(event.modifiers() & Qt.KeyboardModifier.ControlModifier)
@@ -176,11 +208,273 @@ class TagButton(QPushButton):
 
     def mouseMoveEvent(self, event):
         if (event.buttons() & Qt.MouseButton.LeftButton) and (event.modifiers() & Qt.KeyboardModifier.ControlModifier):
-            if self._drag_start_pos is not None and (event.pos() - self._drag_start_pos).manhattanLength() >= QApplication.startDragDistance():
-                self._drag_start_pos = None
-                self._start_tag_drag()
-                return
+            if self._drag_start_pos is not None:
+                dist = (event.pos() - self._drag_start_pos).manhattanLength()
+                if dist >= QApplication.startDragDistance():
+                    if not getattr(self, "_is_live_dragging", False):
+                        self._start_live_tag_drag()
+                    self._handle_live_tag_move(event.globalPosition().toPoint())
+                    return
         super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            if getattr(self, "_is_live_dragging", False):
+                self._finish_live_tag_drag()
+                self._drag_start_pos = None
+                event.accept()
+                return
+            if not (event.modifiers() & Qt.KeyboardModifier.ControlModifier):
+                self.clicked.emit()
+            self._drag_start_pos = None
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
+
+    def eventFilter(self, obj, event):
+        if getattr(self, "_is_live_dragging", False):
+            if event.type() == QEvent.Type.MouseButtonRelease:
+                self._finish_live_tag_drag()
+                return True
+        return super().eventFilter(obj, event)
+
+    def hideEvent(self, event):
+        TagButton._active_drag_tag = None
+        if getattr(self, "_is_live_dragging", False):
+            self._finish_live_tag_drag()
+        super().hideEvent(event)
+
+    def _start_live_tag_drag(self):
+        TagButton._active_drag_tag = self
+        self._is_live_dragging = True
+        self.setCursor(Qt.CursorShape.SizeAllCursor)
+        self.setProperty("live_dragging", "true")
+        self.update_appearance()
+        self._origin_gw = self._get_parent_group_widget()
+        self._placeholder_gw = None
+        self._placeholder = None
+        self._target_gw = None
+        self._target_idx = -1
+        self._last_swap_pos = None
+        try:
+            self.grabMouse()
+        except Exception:
+            pass
+        QApplication.instance().installEventFilter(self)
+        MotionHelper.fade_opacity(self, MotionConstants.OPACITY_FULL, MotionConstants.OPACITY_DRAGGING)
+
+    def _get_parent_group_widget(self):
+        p = self.parent()
+        while p:
+            if hasattr(p, "group_id") and hasattr(p, "flow_layout"):
+                return p
+            p = p.parent()
+        return None
+
+    def _handle_live_tag_move(self, global_pos: QPoint):
+        main_win = self.window()
+        origin_gw = getattr(self, "_origin_gw", None) or self._get_parent_group_widget()
+        self._origin_gw = origin_gw
+        if not origin_gw or not hasattr(main_win, "config") or not hasattr(main_win, "group_widgets"):
+            return
+
+        target_gw = None
+        for gw in main_win.group_widgets:
+            if gw.isVisible():
+                gw_rect = QRect(gw.mapToGlobal(QPoint(0, 0)), gw.size())
+                if gw_rect.contains(global_pos):
+                    target_gw = gw
+                    break
+
+        if not target_gw:
+            for gw in getattr(main_win, "group_widgets", []):
+                gw._cancel_auto_expand()
+            if hasattr(self, "_placeholder") and self._placeholder and self._placeholder_gw:
+                self._placeholder_gw.flow_layout.removeWidget(self._placeholder, animate=True)
+                self._placeholder_gw = None
+                self._target_gw = None
+                self._target_idx = -1
+            return
+
+        # Cancel auto-expand on any group that is not the current hover target
+        for gw in main_win.group_widgets:
+            if gw != target_gw:
+                gw._cancel_auto_expand()
+
+        if target_gw.collapsed:
+            target_gw._start_auto_expand()
+            # Do not insert placeholder into a collapsed group while hovering over it
+            if hasattr(self, "_placeholder") and self._placeholder and self._placeholder_gw:
+                self._placeholder_gw.flow_layout.removeWidget(self._placeholder, animate=True)
+                self._placeholder_gw = None
+                self._target_gw = None
+                self._target_idx = -1
+            return
+        else:
+            target_gw._cancel_auto_expand()
+
+        if target_gw == origin_gw:
+            # Hovering within original group: clean up placeholder in other groups
+            if hasattr(self, "_placeholder") and self._placeholder and self._placeholder_gw:
+                self._placeholder_gw.flow_layout.removeWidget(self._placeholder, animate=True)
+                self._placeholder_gw = None
+                self._target_gw = None
+                self._target_idx = -1
+
+            other_buttons = []
+            for i in range(origin_gw.flow_layout.count()):
+                it = origin_gw.flow_layout.itemAt(i)
+                if it and it.widget() and it.widget() != self and isinstance(it.widget(), TagButton):
+                    other_buttons.append(it.widget())
+
+            curr_idx = origin_gw.flow_layout.indexOf(self)
+            target_idx = len(other_buttons)
+            for idx, btn in enumerate(other_buttons):
+                b_rect = QRect(btn.mapToGlobal(QPoint(0, 0)), btn.size())
+                if global_pos.y() < b_rect.top():
+                    target_idx = idx
+                    break
+                elif b_rect.top() <= global_pos.y() <= b_rect.bottom() + 6:
+                    if curr_idx >= 0 and curr_idx <= idx:
+                        threshold_x = b_rect.left() + min(8, int(b_rect.width() * 0.2))
+                        if global_pos.x() < threshold_x:
+                            target_idx = idx
+                            break
+                    else:
+                        threshold_x = b_rect.right() - min(8, int(b_rect.width() * 0.2))
+                        if global_pos.x() < threshold_x:
+                            target_idx = idx
+                            break
+
+            if curr_idx != target_idx:
+                # Apply hysteresis to prevent rapid vibration on slow movements near boundaries
+                if getattr(self, "_last_swap_pos", None) is not None:
+                    if (global_pos - self._last_swap_pos).manhattanLength() < MotionConstants.DEADBAND_TAG_SWAP_PX:
+                        target_idx = curr_idx
+
+            if curr_idx != target_idx:
+                self._last_swap_pos = global_pos
+                origin_gw.flow_layout.moveWidget(self, target_idx, animate=True)
+                self._target_gw = origin_gw
+                self._target_idx = target_idx
+        else:
+            # Hovering over another group: use visual preview placeholder matching tag color
+            if hasattr(self, "_placeholder") and self._placeholder and self._placeholder_gw and self._placeholder_gw != target_gw:
+                self._placeholder_gw.flow_layout.removeWidget(self._placeholder, animate=True)
+                self._placeholder_gw = None
+
+            if not hasattr(self, "_placeholder") or self._placeholder is None:
+                tag_bg = self.data.get("bg_color", "#bae6fd")
+                self._placeholder = TagPlaceholder(self.size(), tag_bg, self.effective_theme)
+
+            other_buttons = []
+            for i in range(target_gw.flow_layout.count()):
+                it = target_gw.flow_layout.itemAt(i)
+                if it and it.widget() and it.widget() != self._placeholder and isinstance(it.widget(), TagButton):
+                    other_buttons.append(it.widget())
+
+            curr_p_idx = target_gw.flow_layout.indexOf(self._placeholder) if self._placeholder_gw == target_gw else -1
+            target_idx = len(other_buttons)
+            for idx, btn in enumerate(other_buttons):
+                b_rect = QRect(btn.mapToGlobal(QPoint(0, 0)), btn.size())
+                if global_pos.y() < b_rect.top():
+                    target_idx = idx
+                    break
+                elif b_rect.top() <= global_pos.y() <= b_rect.bottom() + 6:
+                    if curr_p_idx >= 0 and curr_p_idx <= idx:
+                        threshold_x = b_rect.left() + min(8, int(b_rect.width() * 0.2))
+                        if global_pos.x() < threshold_x:
+                            target_idx = idx
+                            break
+                    else:
+                        threshold_x = b_rect.right() - min(8, int(b_rect.width() * 0.2))
+                        if global_pos.x() < threshold_x:
+                            target_idx = idx
+                            break
+
+            if self._placeholder_gw != target_gw:
+                self._placeholder.setParent(target_gw.body_container)
+                target_gw.flow_layout.insertWidget(target_idx, self._placeholder, animate=True)
+                self._placeholder.show()
+                self._placeholder_gw = target_gw
+                self._target_gw = target_gw
+                self._target_idx = target_idx
+                self._last_swap_pos = global_pos
+            else:
+                if curr_p_idx != target_idx:
+                    # Apply hysteresis to prevent rapid placeholder vibration
+                    if getattr(self, "_last_swap_pos", None) is not None:
+                        if (global_pos - self._last_swap_pos).manhattanLength() < MotionConstants.DEADBAND_TAG_SWAP_PX:
+                            target_idx = curr_p_idx
+                if curr_p_idx != target_idx:
+                    self._last_swap_pos = global_pos
+                    target_gw.flow_layout.moveWidget(self._placeholder, target_idx, animate=True)
+                    self._target_idx = target_idx
+
+        main_win.groups_container.layout().activate()
+
+    def _finish_live_tag_drag(self):
+        TagButton._active_drag_tag = None
+        try:
+            QApplication.instance().removeEventFilter(self)
+        except Exception:
+            pass
+        try:
+            if self.mouseGrabber() == self:
+                self.releaseMouse()
+        except Exception:
+            pass
+        self._is_live_dragging = False
+        self.unsetCursor()
+        self.setProperty("live_dragging", "false")
+        self.update_appearance()
+
+        main_win = self.window()
+        target_gw = getattr(self, "_target_gw", None)
+        target_idx = getattr(self, "_target_idx", -1)
+        origin_gw = getattr(self, "_origin_gw", None)
+        placeholder = getattr(self, "_placeholder", None)
+        placeholder_gw = getattr(self, "_placeholder_gw", None)
+
+        if placeholder:
+            if placeholder_gw:
+                placeholder_gw.flow_layout.removeWidget(placeholder, animate=False)
+            placeholder.deleteLater()
+            self._placeholder = None
+            self._placeholder_gw = None
+
+        if target_gw and origin_gw and target_gw != origin_gw and target_idx >= 0:
+            if hasattr(main_win, "config"):
+                from src.services.group_model_service import GroupModelService
+                GroupModelService.reorder_tag_to_index(main_win.config, self.data["id"], target_gw.group_id, target_idx)
+            origin_gw.flow_layout.removeWidget(self, animate=True)
+            target_gw.flow_layout.insertWidget(target_idx, self, animate=True)
+            self.setParent(target_gw.body_container)
+            self.show()
+            self.update_appearance()
+        elif origin_gw:
+            if hasattr(main_win, "config"):
+                from src.services.group_model_service import GroupModelService
+                final_idx = origin_gw.flow_layout.indexOf(self)
+                if final_idx >= 0:
+                    GroupModelService.reorder_tag_to_index(main_win.config, self.data["id"], origin_gw.group_id, final_idx)
+
+        self._target_gw = None
+        self._target_idx = -1
+        self._origin_gw = None
+        self._last_swap_pos = None
+
+        for gw in getattr(main_win, "group_widgets", []):
+            gw._cancel_auto_expand()
+
+        MotionHelper.fade_opacity(self, MotionConstants.OPACITY_DRAGGING, MotionConstants.OPACITY_FULL)
+
+        if hasattr(main_win, "groups_container"):
+            main_win.groups_container.layout().activate()
+        if hasattr(main_win, "file_ctrl"):
+            main_win.file_ctrl.update_highlights()
+        if hasattr(main_win, "save_config"):
+            main_win.save_config()
 
     def _start_tag_drag(self):
         drag = QDrag(self)

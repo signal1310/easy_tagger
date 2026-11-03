@@ -7,9 +7,9 @@ from tests import get_qapp
 
 get_qapp()
 
-from PyQt6.QtCore import QEvent, QMimeData, QPointF, QRect, Qt, QUrl
+from PyQt6.QtCore import QEvent, QMimeData, QPointF, QPropertyAnimation, QRect, Qt, QUrl
 from PyQt6.QtGui import QDragEnterEvent, QDragLeaveEvent, QDropEvent, QFont, QFontMetrics, QMouseEvent
-from PyQt6.QtWidgets import QPushButton, QWidget
+from PyQt6.QtWidgets import QApplication, QPushButton, QWidget
 
 from src.core.defaults import MIME_GROUP, MIME_TAG
 from src.ui.widgets.action_bar import ActionBar
@@ -32,6 +32,19 @@ class TestWidgets(unittest.TestCase):
         self.assertGreater(fl.heightForWidth(100), fl.heightForWidth(400))
         fl.setGeometry(QRect(0, 0, 140, 120))
         self.assertIsNotNone(fl.takeAt(0))
+        self.assertEqual(fl.count(), 3)
+
+        # insertWidget, indexOf, removeWidget, moveWidget
+        new_btn = QPushButton("신규")
+        fl.insertWidget(1, new_btn)
+        self.assertEqual(fl.indexOf(new_btn), 1)
+        self.assertEqual(fl.count(), 4)
+
+        fl.moveWidget(new_btn, 0)
+        self.assertEqual(fl.indexOf(new_btn), 0)
+
+        fl.removeWidget(new_btn)
+        self.assertEqual(fl.indexOf(new_btn), -1)
         self.assertEqual(fl.count(), 3)
 
     def test_tag_button_sizing_tooltips_and_drop_events(self):
@@ -186,6 +199,194 @@ class TestWidgets(unittest.TestCase):
         texts = [a.text() for a in menu.actions() if not a.isSeparator()]
         self.assertEqual(len(texts), 4)
         self.assertIn("실행 취소 (2)", texts[0])
+
+    def test_live_drag_tag_and_group(self):
+        gw = GroupWidget({"id": "g1", "name": "그룹A", "collapsed": False}, fixed_height=38)
+        tag_btn = TagButton({"id": "t1", "name": "태그1"}, fixed_height=38)
+        gw.flow_layout.addWidget(tag_btn)
+
+        # Test TagButton live drag lifecycle
+        tag_btn._start_live_tag_drag()
+        self.assertTrue(tag_btn._is_live_dragging)
+        self.assertIn("#38bdf8", tag_btn.styleSheet())
+
+        # Test eventFilter intercepts mouse release anywhere and resets border
+        from PyQt6.QtGui import QMouseEvent
+        rel_ev = QMouseEvent(QEvent.Type.MouseButtonRelease, QPointF(0, 0), Qt.MouseButton.LeftButton, Qt.MouseButton.NoButton, Qt.KeyboardModifier.NoModifier)
+        tag_btn.eventFilter(tag_btn, rel_ev)
+        self.assertFalse(tag_btn._is_live_dragging)
+        self.assertNotIn("#38bdf8", tag_btn.styleSheet())
+
+        # Test GroupWidget live drag lifecycle
+        gw.start_live_drag()
+        self.assertEqual(gw.header_frame.property("live_dragging"), "true")
+
+        gw.finish_live_drag()
+        self.assertEqual(gw.header_frame.property("live_dragging"), "false")
+
+    def test_cross_group_drag_preview_and_commit_on_drop(self):
+        class MockWin(QWidget):
+            def __init__(self):
+                super().__init__()
+                self.config = {
+                    "groups": [
+                        {"id": "g1", "name": "그룹1", "buttons": []},
+                        {"id": "g2", "name": "그룹2", "buttons": []},
+                        {"id": "g3", "name": "그룹3", "buttons": [{"id": "t1", "name": "태그1"}]},
+                    ]
+                }
+                self.groups_container = QWidget(self)
+                self.groups_layout = FlowLayout(self.groups_container)
+                self.group_widgets = []
+
+        win = MockWin()
+        win.resize(400, 600)
+        win.show()
+        gw1 = GroupWidget(win.config["groups"][0], parent=win.groups_container)
+        gw2 = GroupWidget(win.config["groups"][1], parent=win.groups_container)
+        gw3 = GroupWidget(win.config["groups"][2], parent=win.groups_container)
+        gw1.setGeometry(0, 0, 380, 100)
+        gw2.setGeometry(0, 110, 380, 100)
+        gw3.setGeometry(0, 220, 380, 100)
+        win.group_widgets = [gw1, gw2, gw3]
+        for gw in (gw1, gw2, gw3):
+            gw.show()
+
+        t1_btn = TagButton({"id": "t1", "name": "태그1"}, parent=gw3.body_container)
+        gw3.flow_layout.addWidget(t1_btn)
+
+        t1_btn._start_live_tag_drag()
+        self.assertEqual(t1_btn._origin_gw, gw3)
+
+        # 1. Hover over Group 2: Group 2 gets preview placeholder, t1 is NOT committed to Group 2
+        g2_pos = gw2.mapToGlobal(QPointF(10, 10).toPoint())
+        t1_btn._handle_live_tag_move(g2_pos)
+        self.assertEqual(t1_btn._target_gw, gw2)
+        self.assertIsNotNone(t1_btn._placeholder)
+        self.assertEqual(t1_btn._placeholder_gw, gw2)
+        self.assertEqual(t1_btn.parent(), gw3.body_container)  # NOT absorbed by Group 2!
+
+        # 2. Hover over Group 1: Group 2 placeholder cleaned up, Group 1 gets preview placeholder
+        g1_pos = gw1.mapToGlobal(QPointF(10, 10).toPoint())
+        t1_btn._handle_live_tag_move(g1_pos)
+        self.assertEqual(t1_btn._target_gw, gw1)
+        self.assertEqual(t1_btn._placeholder_gw, gw1)
+        self.assertEqual(gw2.flow_layout.count(), 0)  # Group 2 closed gap!
+        self.assertEqual(t1_btn.parent(), gw3.body_container)  # Still in Group 3!
+
+        # 3. Hover back to Group 2: works seamlessly back and forth!
+        t1_btn._handle_live_tag_move(g2_pos)
+        self.assertEqual(t1_btn._target_gw, gw2)
+        self.assertEqual(gw1.flow_layout.count(), 0)  # Group 1 closed gap!
+        self.assertEqual(gw2.flow_layout.count(), 1)  # Group 2 has placeholder!
+        self.assertEqual(t1_btn.parent(), gw3.body_container)
+
+        # 4. Hover to Group 1 and drop: placeholder removed, t1 committed to Group 1
+        t1_btn._handle_live_tag_move(g1_pos)
+        self.assertIsNotNone(t1_btn._placeholder)
+        self.assertEqual(t1_btn.parent(), gw3.body_container)
+        t1_btn._finish_live_tag_drag()
+        self.assertIsNone(t1_btn._placeholder)
+        self.assertEqual(t1_btn.parent(), gw1.body_container)
+        self.assertEqual(gw1.flow_layout.count(), 1)
+        self.assertEqual(gw2.flow_layout.count(), 0)
+        self.assertEqual(gw3.flow_layout.count(), 0)
+        self.assertEqual([b["id"] for b in win.config["groups"][0]["buttons"]], ["t1"])
+
+    def test_drag_collapsed_group_delay_and_placeholder_color(self):
+        class MockWin(QWidget):
+            def __init__(self):
+                super().__init__()
+                self.config = {
+                    "groups": [
+                        {"id": "g1", "name": "그룹1", "buttons": []},
+                        {"id": "g2", "name": "그룹2", "collapsed": True, "buttons": []},
+                    ]
+                }
+                self.groups_container = QWidget(self)
+                self.groups_layout = FlowLayout(self.groups_container)
+                self.group_widgets = []
+
+        win = MockWin()
+        win.resize(400, 600)
+        win.show()
+        gw1 = GroupWidget(win.config["groups"][0], parent=win.groups_container)
+        gw2 = GroupWidget(win.config["groups"][1], parent=win.groups_container)
+        gw1.setGeometry(0, 0, 380, 100)
+        gw2.setGeometry(0, 110, 380, 100)
+        win.group_widgets = [gw1, gw2]
+        gw1.show()
+        gw2.show()
+
+        custom_tag = TagButton({"id": "t_custom", "name": "보라태그", "bg_color": "#c084fc"}, parent=gw1.body_container)
+        gw1.flow_layout.addWidget(custom_tag)
+
+        custom_tag._start_live_tag_drag()
+        # Hover over collapsed gw2
+        g2_pos = gw2.mapToGlobal(QPointF(20, 20).toPoint())
+        custom_tag._handle_live_tag_move(g2_pos)
+
+        # gw2 must NOT be expanded immediately
+        self.assertTrue(gw2.collapsed)
+        # auto-expand timer must be ticking
+        self.assertTrue(gw2._auto_expand_timer.isActive())
+        # placeholder must NOT be created/inserted into the collapsed group
+        self.assertIsNone(custom_tag._placeholder)
+
+        # Move back to open gw1: gw2 auto expand cancelled
+        g1_pos = gw1.mapToGlobal(QPointF(20, 20).toPoint())
+        custom_tag._handle_live_tag_move(g1_pos)
+        self.assertFalse(gw2._auto_expand_timer.isActive())
+
+        custom_tag._finish_live_tag_drag()
+
+    def test_group_collapse_expand_animation(self):
+        win = QWidget()
+        win.resize(400, 600)
+        win.show()
+        gw = GroupWidget({"id": "g_anim", "name": "애니메이션그룹", "collapsed": False}, parent=win)
+        gw.setGeometry(0, 0, 380, 150)
+        gw.show()
+        btn1 = TagButton({"id": "t1", "name": "태그1"}, parent=gw.body_container)
+        gw.flow_layout.addWidget(btn1)
+        QApplication.processEvents()
+
+        # 1. Trigger collapse with animation
+        gw.set_collapsed(True, notify=True, animate=True)
+        self.assertTrue(gw.collapsed)
+        self.assertIsNotNone(gw._collapse_anim)
+        self.assertTrue(gw._collapse_anim.state() == QPropertyAnimation.State.Running)
+
+        # Let animation finish
+        gw._collapse_anim.stop()
+        gw._collapse_anim.finished.emit()
+        self.assertFalse(gw.body_container.isVisible())
+        self.assertIsNone(gw._collapse_anim)
+
+        # 2. Trigger expand via toggle_collapse
+        gw.toggle_collapse()
+        self.assertFalse(gw.collapsed)
+        self.assertTrue(gw.body_container.isVisible())
+        self.assertIsNotNone(gw._collapse_anim)
+        self.assertTrue(gw._collapse_anim.state() == QPropertyAnimation.State.Running)
+
+        gw._collapse_anim.stop()
+        gw._collapse_anim.finished.emit()
+        self.assertIsNone(gw._collapse_anim)
+        self.assertTrue(gw.body_container.isVisible())
+
+        # 3. Test _on_auto_expand_timeout during tag live drag
+        gw.set_collapsed(True, notify=False, animate=False)
+        self.assertTrue(gw.collapsed)
+        btn1._start_live_tag_drag()
+        self.assertEqual(TagButton._active_drag_tag, btn1)
+
+        gw._on_auto_expand_timeout()
+        self.assertFalse(gw.collapsed)
+        self.assertIsNotNone(gw._collapse_anim)
+
+        btn1._finish_live_tag_drag()
+        self.assertIsNone(TagButton._active_drag_tag)
 
 
 if __name__ == "__main__":

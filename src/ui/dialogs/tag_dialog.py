@@ -1,7 +1,7 @@
 import uuid
 from typing import Optional
 
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QColor, QFont
 from PyQt6.QtWidgets import (
     QColorDialog,
@@ -101,6 +101,20 @@ class TagDialog(QDialog):
     def showEvent(self, event):
         super().showEvent(event)
         ThemeManager.apply_titlebar_theme(self, self.effective_theme)
+        QTimer.singleShot(0, self._focus_input)
+
+    def _focus_input(self):
+        self.activateWindow()
+        self.raise_()
+        self.edit_name.setFocus()
+        self.edit_name.selectAll()
+
+    def keyPressEvent(self, event):
+        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            self._save_and_accept()
+            event.accept()
+            return
+        super().keyPressEvent(event)
 
     def _init_ui(self):
         main_layout = QVBoxLayout(self)
@@ -116,12 +130,14 @@ class TagDialog(QDialog):
         self.edit_name.setMinimumHeight(32)
         self.edit_name.setPlaceholderText("예: 여행, 4K, -fps 60, -score ?")
         self.edit_name.textChanged.connect(self._update_preview)
+        self.edit_name.returnPressed.connect(self._save_and_accept)
         form.addRow("태그 이름:", self.edit_name)
 
         self.edit_desc = QLineEdit()
         self.edit_desc.setMinimumHeight(32)
         self.edit_desc.setPlaceholderText("마우스 호버 시 툴팁으로 표시될 설명")
         self.edit_desc.textChanged.connect(self._update_preview)
+        self.edit_desc.returnPressed.connect(self._save_and_accept)
         form.addRow("태그 설명:", self.edit_desc)
 
         hint_color = "#a1a1aa" if self.effective_theme == "dark" else "#64748b"
@@ -163,6 +179,8 @@ class TagDialog(QDialog):
 
         self.btn_save = QPushButton("저장")
         self.btn_save.setObjectName("btnSave")
+        self.btn_save.setDefault(True)
+        self.btn_save.setAutoDefault(True)
         self.btn_save.clicked.connect(self._save_and_accept)
         btn_layout.addWidget(self.btn_save)
         main_layout.addLayout(btn_layout)

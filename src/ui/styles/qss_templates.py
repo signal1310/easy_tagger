@@ -103,6 +103,10 @@ def get_main_qss(effective_theme: str) -> str:
             border-bottom-left-radius: 8px; border-bottom-right-radius: 8px;
         }}
         QFrame#groupHeader:hover {{ background-color: {p['ghdr_hover']}; }}
+        QFrame#groupHeader[live_dragging="true"] {{
+            background-color: {p['ghdr_hover']};
+            border: 1.5px solid #38bdf8;
+        }}
         QLabel#lblGroupTitle {{ color: {p['gtitle_fg']}; font-weight: 700; font-size: 12px; }}
         QLabel#lblGroupIndicator {{
             color: {p['gind_fg']}; font-weight: 700; font-size: 10px;

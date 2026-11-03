@@ -112,6 +112,23 @@ class GroupModelService:
         return get_tag_name(src_btn, "태그")
 
     @classmethod
+    def reorder_tag_to_index(
+        cls, config: Dict[str, Any], source_tag_id: str, target_group_id: str, target_index: int
+    ) -> Optional[str]:
+        if not source_tag_id or not target_group_id:
+            return None
+        src_group, src_btn = cls.find_tag_and_group(config, source_tag_id)
+        dst_group = cls.find_group(config, target_group_id)
+        if not src_btn or not src_group or not dst_group:
+            return None
+
+        src_group["buttons"].remove(src_btn)
+        btns = dst_group.setdefault("buttons", [])
+        idx = max(0, min(target_index, len(btns)))
+        btns.insert(idx, src_btn)
+        return get_tag_name(src_btn, "태그")
+
+    @classmethod
     def move_tag_to_group(
         cls, config: Dict[str, Any], source_tag_id: str, target_group_id: str
     ) -> Optional[Tuple[str, str]]:

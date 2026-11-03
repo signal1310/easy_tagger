@@ -56,6 +56,19 @@ class TestDialogs(unittest.TestCase):
         self.assertEqual(saved_prompt["param_val_mode"], "prompt")
         self.assertEqual(saved_prompt["param_val"], "")
 
+        # Enter key triggers save anywhere in TagDialog
+        from PyQt6.QtGui import QKeyEvent
+        from PyQt6.QtCore import Qt, QEvent
+        enter_ev = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Return, Qt.KeyboardModifier.NoModifier)
+        tag_dlg_enter = TagDialog(initial_data={"name": "엔터테스트"})
+        tag_dlg_enter.keyPressEvent(enter_ev)
+        self.assertEqual(tag_dlg_enter.get_data()["name"], "엔터테스트")
+
+        # Focus input helper selects all
+        tag_dlg_enter.edit_name.setText("포커스테스트")
+        tag_dlg_enter._focus_input()
+        self.assertEqual(tag_dlg_enter.edit_name.selectedText(), "포커스테스트")
+
         # Dark theme preset color adaptation
         dark_tag_dlg = TagDialog(effective_theme="dark")
         swatches = [b for b in dark_tag_dlg.color_picker.findChildren(QPushButton) if b.objectName() != "btnSecondary"]
