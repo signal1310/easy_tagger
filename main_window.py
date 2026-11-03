@@ -134,23 +134,9 @@ class MainWindow(QMainWindow):
             self.btn_add_group.setIcon(icon_factory.get_icon("folder-plus", theme=eff, size=15))
             self.btn_add_group.setIconSize(btn_icon_size)
 
-        if hasattr(self, "btn_undo"):
-            self.btn_undo.setIcon(icon_factory.get_icon("undo", theme=eff, size=15))
-            self.btn_undo.setIconSize(btn_icon_size)
-
-        if hasattr(self, "btn_pin"):
-            pin_active = self.btn_pin.isChecked()
-            pin_color = "#2563eb" if (eff == "light" and pin_active) else ("#93c5fd" if pin_active else None)
-            self.btn_pin.setIcon(icon_factory.get_icon("pin", color=pin_color, theme=eff, size=15))
-            self.btn_pin.setIconSize(btn_icon_size)
-
-        if hasattr(self, "btn_settings"):
-            self.btn_settings.setIcon(icon_factory.get_icon("settings", theme=eff, size=15))
-            self.btn_settings.setIconSize(btn_icon_size)
-
-        if hasattr(self, "btn_help"):
-            self.btn_help.setIcon(icon_factory.get_icon("help", theme=eff, size=15))
-            self.btn_help.setIconSize(btn_icon_size)
+        if hasattr(self, "btn_menu"):
+            self.btn_menu.setIcon(icon_factory.get_icon("menu", theme=eff, size=15))
+            self.btn_menu.setIconSize(btn_icon_size)
 
         if hasattr(self, "btn_close_active_file"):
             self.btn_close_active_file.setIcon(icon_factory.get_icon("x", theme=eff, size=12))
@@ -231,7 +217,7 @@ class MainWindow(QMainWindow):
 
         bar_layout.addStretch()
 
-        # Visible Standard GUI Actions (modern vector icons)
+        # Visible Standard GUI Actions: Add Group & Hamburger Menu
         self.btn_add_group = QPushButton()
         self.btn_add_group.setObjectName("btnHeaderAction")
         self.btn_add_group.setToolTip("새 그룹 추가...")
@@ -239,34 +225,12 @@ class MainWindow(QMainWindow):
         self.btn_add_group.clicked.connect(self._add_new_group)
         bar_layout.addWidget(self.btn_add_group)
 
-        self.btn_undo = QPushButton()
-        self.btn_undo.setObjectName("btnHeaderAction")
-        self.btn_undo.setToolTip("실행 취소 (Ctrl+Z)")
-        self.btn_undo.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_undo.clicked.connect(self.undo_last_action)
-        bar_layout.addWidget(self.btn_undo)
-
-        self.btn_pin = QPushButton()
-        self.btn_pin.setObjectName("btnHeaderPin")
-        self.btn_pin.setCheckable(True)
-        self.btn_pin.setToolTip("항상 위에 고정 (클릭하여 토글)")
-        self.btn_pin.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_pin.clicked.connect(self._toggle_pin)
-        bar_layout.addWidget(self.btn_pin)
-
-        self.btn_settings = QPushButton()
-        self.btn_settings.setObjectName("btnHeaderAction")
-        self.btn_settings.setToolTip("환경 설정... (Ctrl+,)")
-        self.btn_settings.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_settings.clicked.connect(self._open_settings_dialog)
-        bar_layout.addWidget(self.btn_settings)
-
-        self.btn_help = QPushButton()
-        self.btn_help.setObjectName("btnHeaderAction")
-        self.btn_help.setToolTip("사용 팁 및 단축키 안내 (F1)")
-        self.btn_help.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_help.clicked.connect(self._open_help_dialog)
-        bar_layout.addWidget(self.btn_help)
+        self.btn_menu = QPushButton()
+        self.btn_menu.setObjectName("btnHeaderAction")
+        self.btn_menu.setToolTip("메뉴")
+        self.btn_menu.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_menu.clicked.connect(self._show_hamburger_menu)
+        bar_layout.addWidget(self.btn_menu)
 
         self._update_action_bar_icons()
 
@@ -558,6 +522,45 @@ class MainWindow(QMainWindow):
                 return
             self._apply_tag_to_files(valid_paths, tag_to_apply)
 
+    def _show_hamburger_menu(self):
+        eff = self.get_effective_theme()
+        menu = QMenu(self)
+        menu.setStyleSheet(ThemeManager.get_context_menu_style(eff))
+
+        # 1. Undo
+        can_undo = len(self.undo_stack) > 0
+        undo_label = f"실행 취소 ({len(self.undo_stack)})" if can_undo else "실행 취소"
+        action_undo = menu.addAction(icon_factory.get_icon("undo", theme=eff), f"{undo_label}\tCtrl+Z")
+        action_undo.setEnabled(can_undo)
+
+        menu.addSeparator()
+
+        # 2. Always on top
+        is_pinned = bool(self.config.get("always_on_top", False))
+        pin_color = "#2563eb" if (eff == "light" and is_pinned) else ("#93c5fd" if is_pinned else None)
+        action_pin = menu.addAction(icon_factory.get_icon("pin", color=pin_color, theme=eff), "항상 위에 고정")
+        action_pin.setCheckable(True)
+        action_pin.setChecked(is_pinned)
+
+        # 3. Settings
+        action_settings = menu.addAction(icon_factory.get_icon("settings", theme=eff), "환경 설정...\tCtrl+,")
+
+        menu.addSeparator()
+
+        # 4. Help
+        action_help = menu.addAction(icon_factory.get_icon("help", theme=eff), "도움말\tF1")
+
+        pos = self.btn_menu.mapToGlobal(self.btn_menu.rect().bottomLeft())
+        chosen = menu.exec(pos)
+        if chosen == action_undo:
+            self.undo_last_action()
+        elif chosen == action_pin:
+            self._toggle_pin()
+        elif chosen == action_settings:
+            self._open_settings_dialog()
+        elif chosen == action_help:
+            self._open_help_dialog()
+
     def _toggle_pin(self):
         new_state = not self.config.get("always_on_top", False)
         self.config["always_on_top"] = new_state
@@ -738,8 +741,8 @@ class MainWindow(QMainWindow):
         base_name = get_tag_name(dup, "태그")
         new_name = f"{base_name} (복사)"
         dup["name"] = new_name
-        dup["label"] = new_name
-        dup["tag_text"] = new_name
+        dup.pop("label", None)
+        dup.pop("tag_text", None)
 
         group, orig_btn = self._find_tag_and_group(btn_data.get("id", ""))
         if group and orig_btn:

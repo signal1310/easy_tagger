@@ -259,8 +259,8 @@ class TestAppWorkflow(unittest.TestCase):
 
         saved = dlg.get_data()
         self.assertEqual(saved["name"], "시네마틱")
-        self.assertEqual(saved["label"], "시네마틱")
-        self.assertEqual(saved["tag_text"], "시네마틱")
+        self.assertNotIn("label", saved)
+        self.assertNotIn("tag_text", saved)
         self.assertEqual(saved["tag_type"], "normal")
         self.assertEqual(saved["description"], "영화 같은 영상")
 
@@ -554,6 +554,33 @@ class TestAppWorkflow(unittest.TestCase):
         adv = fm.horizontalAdvance(long_name)
         # Button width must provide enough space for bold text + padding + border
         self.assertGreaterEqual(b_long.width(), adv + 16)
+
+    def test_hamburger_menu_and_dialog_titles(self):
+        """Verifies top action bar is simplified to Add Group + Hamburger menu, and dialogs have simplified titles."""
+        from settings_dialog import SettingsDialog
+        from dialog_utils import HelpDialog
+
+        # 1. Top action bar contains only add group and hamburger menu
+        self.assertTrue(hasattr(self.win, "btn_add_group"))
+        self.assertTrue(hasattr(self.win, "btn_menu"))
+        self.assertFalse(hasattr(self.win, "btn_undo"))
+        self.assertFalse(hasattr(self.win, "btn_pin"))
+        self.assertFalse(hasattr(self.win, "btn_settings"))
+        self.assertFalse(hasattr(self.win, "btn_help"))
+
+        # 2. Dialog titles
+        settings_dlg = SettingsDialog(self.win.config, effective_theme="dark", parent=self.win)
+        self.assertEqual(settings_dlg.windowTitle(), "환경 설정")
+
+        help_dlg = HelpDialog(effective_theme="dark", parent=self.win)
+        self.assertEqual(help_dlg.windowTitle(), "도움말")
+
+        # 3. Clean button properties (no label or tag_text)
+        for g in self.win.config.get("groups", []):
+            for b in g.get("buttons", []):
+                self.assertNotIn("label", b)
+                self.assertNotIn("tag_text", b)
+                self.assertIn("name", b)
 
 
 if __name__ == "__main__":

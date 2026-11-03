@@ -36,8 +36,6 @@ def parse_tag_definition(raw_name: str, fallback_mode: str = "") -> dict:
             norm_name = f"{key} ?"
             return {
                 "name": norm_name,
-                "label": norm_name,
-                "tag_text": norm_name,
                 "tag_type": "param",
                 "param_key": key,
                 "param_val_mode": "prompt",
@@ -46,8 +44,6 @@ def parse_tag_definition(raw_name: str, fallback_mode: str = "") -> dict:
         norm_name = f"{key} {val}".strip()
         return {
             "name": norm_name,
-            "label": norm_name,
-            "tag_text": norm_name,
             "tag_type": "param",
             "param_key": key,
             "param_val_mode": "fixed",
@@ -56,8 +52,6 @@ def parse_tag_definition(raw_name: str, fallback_mode: str = "") -> dict:
 
     return {
         "name": clean,
-        "label": clean,
-        "tag_text": clean,
         "tag_type": "normal",
     }
 

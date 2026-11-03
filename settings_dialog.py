@@ -1,6 +1,6 @@
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QComboBox,
-    QCheckBox, QSpinBox, QPushButton, QGroupBox
+    QCheckBox, QSpinBox, QPushButton, QGroupBox, QLabel
 )
 import icon_factory
 from theme_manager import ThemeManager
@@ -13,7 +13,7 @@ class SettingsDialog(QDialog):
     """
     def __init__(self, current_config: dict, effective_theme: str = "dark", parent=None):
         super().__init__(parent)
-        self.setWindowTitle("전역 환경 설정 (Settings)")
+        self.setWindowTitle("환경 설정")
         self.setMinimumWidth(380)
         self.effective_theme = effective_theme
         self.config = dict(current_config)
@@ -81,6 +81,10 @@ class SettingsDialog(QDialog):
 
         # Action Buttons
         btn_layout = QHBoxLayout()
+        subtle_color = "#71717a" if self.effective_theme == "dark" else "#a1a1aa"
+        lbl_version = QLabel("Easy Tagger v1.0.0")
+        lbl_version.setStyleSheet(f"color: {subtle_color}; font-size: 11px;")
+        btn_layout.addWidget(lbl_version)
         btn_layout.addStretch()
 
         self.btn_cancel = QPushButton("취소")

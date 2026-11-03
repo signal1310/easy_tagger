@@ -76,8 +76,6 @@ def get_fallback_template_data() -> Dict[str, Any]:
                     {
                         "id": "btn-general-1",
                         "name": "여행",
-                        "label": "여행",
-                        "tag_text": "여행",
                         "description": "여행 및 일상 브이로그 영상",
                         "tag_type": "normal",
                         "bg_color": "#bae6fd",
@@ -86,8 +84,6 @@ def get_fallback_template_data() -> Dict[str, Any]:
                     {
                         "id": "btn-general-2",
                         "name": "하이라이트",
-                        "label": "하이라이트",
-                        "tag_text": "하이라이트",
                         "description": "주요 하이라이트 및 명장면",
                         "tag_type": "normal",
                         "bg_color": "#fed7aa",
@@ -96,8 +92,6 @@ def get_fallback_template_data() -> Dict[str, Any]:
                     {
                         "id": "btn-general-3",
                         "name": "완료",
-                        "label": "완료",
-                        "tag_text": "완료",
                         "description": "편집 및 검토 완료된 영상",
                         "tag_type": "normal",
                         "bg_color": "#cbd5e1",
@@ -113,8 +107,6 @@ def get_fallback_template_data() -> Dict[str, Any]:
                     {
                         "id": "btn-props-1",
                         "name": "4K",
-                        "label": "4K",
-                        "tag_text": "4K",
                         "description": "4K UHD 초고화질 해상도",
                         "tag_type": "normal",
                         "bg_color": "#a7f3d0",
@@ -123,8 +115,6 @@ def get_fallback_template_data() -> Dict[str, Any]:
                     {
                         "id": "btn-props-2",
                         "name": "-fps 60",
-                        "label": "-fps 60",
-                        "tag_text": "-fps 60",
                         "description": "초당 60 프레임 고주사율 영상",
                         "tag_type": "param",
                         "param_key": "-fps",
@@ -136,8 +126,6 @@ def get_fallback_template_data() -> Dict[str, Any]:
                     {
                         "id": "btn-props-3",
                         "name": "-score ?",
-                        "label": "-score ?",
-                        "tag_text": "-score ?",
                         "description": "영상 점수 및 평점 입력",
                         "tag_type": "param",
                         "param_key": "-score",
@@ -182,6 +170,10 @@ def normalize_tag_data(b: Dict[str, Any]) -> Dict[str, Any]:
 
     spec = parse_tag_definition(raw_name, fallback_mode=b.get("param_val_mode", ""))
     b.update(spec)
+    # Strip redundant duplicate properties
+    b.pop("label", None)
+    b.pop("tag_text", None)
+
     if spec["tag_type"] == "normal":
         for k in ("param_key", "param_val_mode", "param_val"):
             b.pop(k, None)

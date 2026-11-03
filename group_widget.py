@@ -105,7 +105,6 @@ class GroupWidget(QWidget):
         self.header_frame.setObjectName("groupHeader")
         self.header_frame.setCursor(Qt.CursorShape.PointingHandCursor)
         self.header_frame.setFixedHeight(28)
-        self.header_frame.setToolTip(f"'{self.group_name}' (클릭: 접기/펼치기 | Ctrl+드래그: 그룹 순서 변경)")
         self.header_frame.clicked.connect(self.toggle_collapse)
         self.header_frame.rightClicked.connect(self._show_context_menu)
         self.header_frame.startGroupDrag.connect(self._start_group_drag)

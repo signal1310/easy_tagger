@@ -41,8 +41,6 @@ class TagDialog(QDialog):
         self.data = dict(initial_data) if initial_data else {
             "id": str(uuid.uuid4()),
             "name": "새태그",
-            "label": "새태그",
-            "tag_text": "새태그",
             "description": "",
             "tag_type": "normal",
             "bg_color": "#bae6fd",
