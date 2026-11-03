@@ -1,6 +1,7 @@
 import json
+import os
 
-from PyQt6.QtCore import QMimeData, QSize, Qt, pyqtSignal
+from PyQt6.QtCore import QMimeData, QSize, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QCursor, QDrag
 from PyQt6.QtWidgets import QApplication, QFrame, QHBoxLayout, QLabel, QMenu, QPushButton, QVBoxLayout, QWidget
 
@@ -95,6 +96,9 @@ class GroupWidget(QWidget):
     collapseToggled = pyqtSignal(str, bool)
     groupReorderRequested = pyqtSignal(str, str, str)
     tagMovedToGroupRequested = pyqtSignal(str, str)
+    filesDropped = pyqtSignal(list)
+
+    AUTO_EXPAND_HOVER_MS = 600
 
     def __init__(self, group_data: dict, fixed_height: int = 38, effective_theme: str = "dark", parent=None):
         super().__init__(parent)
@@ -104,6 +108,11 @@ class GroupWidget(QWidget):
         self.collapsed = bool(self.group_data.get("collapsed", False))
         self.fixed_height = fixed_height
         self.effective_theme = effective_theme
+
+        self._auto_expand_timer = QTimer(self)
+        self._auto_expand_timer.setSingleShot(True)
+        self._auto_expand_timer.setInterval(self.AUTO_EXPAND_HOVER_MS)
+        self._auto_expand_timer.timeout.connect(self._on_auto_expand_timeout)
 
         self.setAcceptDrops(True)
         self._init_ui()
@@ -154,13 +163,51 @@ class GroupWidget(QWidget):
         drag.setHotSpot(self.header_frame.rect().center())
         drag.exec(Qt.DropAction.MoveAction)
 
+    def _on_auto_expand_timeout(self):
+        if self.collapsed:
+            self.set_collapsed(False, notify=True)
+
+    def _start_auto_expand(self):
+        if self.collapsed and not self._auto_expand_timer.isActive():
+            self._auto_expand_timer.start()
+
+    def _cancel_auto_expand(self):
+        if self._auto_expand_timer.isActive():
+            self._auto_expand_timer.stop()
+
     def dragEnterEvent(self, event):
-        event.acceptProposedAction() if (event.mimeData().hasFormat(MIME_GROUP) or event.mimeData().hasFormat(MIME_TAG)) else event.ignore()
+        has_valid = (
+            event.mimeData().hasFormat(MIME_GROUP)
+            or event.mimeData().hasFormat(MIME_TAG)
+            or event.mimeData().hasUrls()
+        )
+        if has_valid:
+            event.acceptProposedAction()
+            if self.collapsed and (event.mimeData().hasUrls() or event.mimeData().hasFormat(MIME_TAG)):
+                self._start_auto_expand()
+        else:
+            event.ignore()
 
     def dragMoveEvent(self, event):
-        event.acceptProposedAction() if (event.mimeData().hasFormat(MIME_GROUP) or event.mimeData().hasFormat(MIME_TAG)) else event.ignore()
+        has_valid = (
+            event.mimeData().hasFormat(MIME_GROUP)
+            or event.mimeData().hasFormat(MIME_TAG)
+            or event.mimeData().hasUrls()
+        )
+        if has_valid:
+            event.acceptProposedAction()
+            if self.collapsed and (event.mimeData().hasUrls() or event.mimeData().hasFormat(MIME_TAG)):
+                self._start_auto_expand()
+        else:
+            self._cancel_auto_expand()
+            event.ignore()
+
+    def dragLeaveEvent(self, event):
+        self._cancel_auto_expand()
+        super().dragLeaveEvent(event)
 
     def dropEvent(self, event):
+        self._cancel_auto_expand()
         if event.mimeData().hasFormat(MIME_TAG):
             try:
                 payload = json.loads(bytes(event.mimeData().data(MIME_TAG)).decode("utf-8"))
@@ -182,6 +229,12 @@ class GroupWidget(QWidget):
                     return
             except Exception as e:
                 print(f"Error dropping group: {e}")
+        elif event.mimeData().hasUrls():
+            paths = [os.path.normpath(u.toLocalFile()) for u in event.mimeData().urls() if u.isLocalFile()]
+            if paths:
+                event.acceptProposedAction()
+                self.filesDropped.emit(paths)
+                return
         event.ignore()
 
     def set_effective_theme(self, theme: str):

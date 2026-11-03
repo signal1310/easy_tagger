@@ -190,6 +190,7 @@ class MainWindow(QMainWindow):
             gw.collapseToggled.connect(self.group_ctrl.on_group_collapse_toggled)
             gw.groupReorderRequested.connect(self.group_ctrl.reorder_group)
             gw.tagMovedToGroupRequested.connect(self.group_ctrl.move_tag_to_group)
+            gw.filesDropped.connect(self._handle_dropped_files)
 
             for bdata in gdata.get("buttons", []):
                 btn = TagButton(bdata, fixed_height=btn_h, effective_theme=eff, parent=gw.body_container)
@@ -208,6 +209,13 @@ class MainWindow(QMainWindow):
         self.groups_layout.addStretch()
         self.file_ctrl.update_highlights()
 
+    def _handle_dropped_files(self, paths: list):
+        if paths:
+            self.file_ctrl.set_active_files(paths)
+            first = os.path.basename(paths[0])
+            msg = f"'{first}' 편집 준비 완료" if len(paths) == 1 else f"'{first}' 외 {len(paths) - 1}개 파일 편집 준비 완료"
+            QToolTip.showText(QCursor.pos(), msg, self)
+
     def dragEnterEvent(self, event: QDragEnterEvent):
         event.acceptProposedAction() if event.mimeData().hasUrls() else event.ignore()
 
@@ -216,10 +224,7 @@ class MainWindow(QMainWindow):
             paths = [os.path.normpath(u.toLocalFile()) for u in event.mimeData().urls() if u.isLocalFile()]
             if paths:
                 event.acceptProposedAction()
-                self.file_ctrl.set_active_files(paths)
-                first = os.path.basename(paths[0])
-                msg = f"'{first}' 편집 준비 완료" if len(paths) == 1 else f"'{first}' 외 {len(paths) - 1}개 파일 편집 준비 완료"
-                QToolTip.showText(QCursor.pos(), msg, self)
+                self._handle_dropped_files(paths)
 
     def closeEvent(self, event):
         self.config["window_width"], self.config["window_height"] = self.width(), self.height()

@@ -8,7 +8,7 @@ from tests import get_qapp
 get_qapp()
 
 from PyQt6.QtCore import QEvent, QMimeData, QPointF, QRect, Qt, QUrl
-from PyQt6.QtGui import QDropEvent, QFont, QFontMetrics, QMouseEvent
+from PyQt6.QtGui import QDragEnterEvent, QDragLeaveEvent, QDropEvent, QFont, QFontMetrics, QMouseEvent
 from PyQt6.QtWidgets import QPushButton, QWidget
 
 from src.core.defaults import MIME_GROUP, MIME_TAG
@@ -146,6 +146,34 @@ class TestWidgets(unittest.TestCase):
         m_grp.setData(MIME_GROUP, json.dumps({"group_id": "g2"}).encode("utf-8"))
         gw.dropEvent(QDropEvent(QPointF(5, 1), Qt.DropAction.MoveAction, m_grp, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier))
         self.assertEqual(greorder[0], ("g2", "g1", "before"))
+
+        # 4. Auto-expand on hover when dragging files over collapsed group
+        gw.set_collapsed(True, notify=False)
+        self.assertTrue(gw.collapsed)
+        m_file = QMimeData()
+        m_file.setUrls([QUrl.fromLocalFile("test.mp4")])
+        enter_ev = QDragEnterEvent(QPointF(10, 10), Qt.DropAction.CopyAction, m_file, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier)
+        gw.dragEnterEvent(enter_ev)
+        self.assertTrue(enter_ev.isAccepted())
+        self.assertTrue(gw._auto_expand_timer.isActive())
+
+        # Trigger auto-expand timeout
+        gw._on_auto_expand_timeout()
+        self.assertFalse(gw.collapsed)
+
+        # Cancel auto-expand on drag leave
+        gw.set_collapsed(True, notify=False)
+        gw._start_auto_expand()
+        self.assertTrue(gw._auto_expand_timer.isActive())
+        gw.dragLeaveEvent(QDragLeaveEvent())
+        self.assertFalse(gw._auto_expand_timer.isActive())
+
+        # File drop on group emits filesDropped
+        dropped_files = []
+        gw.filesDropped.connect(lambda p: dropped_files.extend(p))
+        gw.dropEvent(QDropEvent(QPointF(10, 10), Qt.DropAction.CopyAction, m_file, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier))
+        self.assertEqual(len(dropped_files), 1)
+        self.assertIn("test.mp4", dropped_files[0])
 
         bar = ActionBar(effective_theme="dark")
         self.assertEqual(bar.update_active_files_display([], "dark"), "Easy Tagger")

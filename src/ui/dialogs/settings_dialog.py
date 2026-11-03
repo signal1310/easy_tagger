@@ -69,10 +69,10 @@ class SettingsDialog(QDialog):
         self.spin_height.setRange(28, 60)
         self.spin_height.setValue(int(self.config.get("button_height", 38)))
         self.spin_height.setSuffix(" px")
-        self.spin_height.setToolTip("모든 태그 버튼의 상하 고정 높이입니다. (가로는 글자 길이에 맞춰 자동 조절)")
-        form.addRow("버튼 높이 (고정):", self.spin_height)
+        self.spin_height.setToolTip("모든 태그 버튼의 상하 고정 높이입니다. (가로는 글자 길이에 맞춰 자동 조절됨)")
+        form.addRow("버튼 높이:", self.spin_height)
 
-        self.chk_always_on_top = QCheckBox("프로그램 항상 위에 표시 (Always on Top)")
+        self.chk_always_on_top = QCheckBox("프로그램을 항상 위에 고정")
         self.chk_always_on_top.setChecked(bool(self.config.get("always_on_top", False)))
         form.addRow("", self.chk_always_on_top)
         layout.addWidget(group)
