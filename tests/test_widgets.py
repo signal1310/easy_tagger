@@ -2,6 +2,7 @@ import json
 import os
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from tests import get_qapp
 
@@ -54,8 +55,8 @@ class TestWidgets(unittest.TestCase):
         b_long = TagButton({"name": long_name, "description": "설명텍스트"}, fixed_height=38, effective_theme="light")
 
         self.assertEqual(b_short.sizeHint().height(), 38)
-        self.assertLess(b_short.width(), 55)
-        self.assertLess(b_two.width(), 55)
+        self.assertLess(b_short.width(), 110)
+        self.assertLess(b_two.width(), 110)
         self.assertGreater(b_long.sizeHint().width(), b_short.sizeHint().width())
 
         calc_f = QFont(b_long.font())
@@ -63,9 +64,10 @@ class TestWidgets(unittest.TestCase):
         calc_f.setWeight(QFont.Weight.Bold)
         self.assertGreaterEqual(b_long.width(), QFontMetrics(calc_f).horizontalAdvance(long_name) + 16)
 
-        # Concise tooltips per state
-        self.assertEqual(b_short.toolTip(), "")
-        self.assertEqual(b_long.toolTip(), "설명텍스트")
+        # Concise tooltips per state without verbose position/format headers
+        self.assertNotIn("위치:", b_short.toolTip())
+        self.assertNotIn("형태:", b_short.toolTip())
+        self.assertIn("설명텍스트", b_long.toolTip())
         self.assertNotIn("우클릭", b_long.toolTip())
         b_long.set_tag_state("off")
         self.assertIn("border: 2px solid", b_long.styleSheet().lower())
@@ -199,6 +201,16 @@ class TestWidgets(unittest.TestCase):
         texts = [a.text() for a in menu.actions() if not a.isSeparator()]
         self.assertEqual(len(texts), 4)
         self.assertIn("실행 취소 (2)", texts[0])
+
+        # Verify GroupWidget context menu actions (integrated group settings)
+        from PyQt6.QtWidgets import QMenu
+        recorded_actions = []
+        def fake_exec(menu_self, *args, **kwargs):
+            recorded_actions.extend([a.text() for a in menu_self.actions() if not a.isSeparator()])
+            return None
+        with patch.object(QMenu, "exec", new=fake_exec):
+            gw._show_context_menu()
+        self.assertEqual(recorded_actions, ["태그 추가...", "그룹 설정...", "그룹 삭제"])
 
     def test_live_drag_tag_and_group(self):
         gw = GroupWidget({"id": "g1", "name": "그룹A", "collapsed": False}, fixed_height=38)
@@ -387,6 +399,55 @@ class TestWidgets(unittest.TestCase):
 
         btn1._finish_live_tag_drag()
         self.assertIsNone(TagButton._active_drag_tag)
+
+    def test_tag_position_indicator_styles_puzzle_and_edge(self):
+        # 1. Clean button text (no brackets for bracket tags, # for hashtag tags, no arrows)
+        btn_pre = TagButton({"name": "태그", "position": "prefix", "format": "bracket"}, parent=None)
+        self.assertNotIn("⇤", btn_pre.text())
+        self.assertNotIn("[", btn_pre.text())
+        self.assertEqual(btn_pre.text(), "태그")
+
+        btn_suf = TagButton({"name": "태그", "position": "suffix", "format": "hashtag"}, parent=None)
+        self.assertNotIn("⇥", btn_suf.text())
+        self.assertEqual(btn_suf.text(), "#태그")
+
+        # 2. Puzzle style: asymmetric border-radius, clean text
+        class MockPuzzleWin(QWidget):
+            def __init__(self):
+                super().__init__()
+                self.config = {"tag_position_indicator_style": "puzzle", "tag_format": "bracket", "position": "suffix"}
+        pwin = MockPuzzleWin()
+        btn_b_pre = TagButton({"name": "접두태그", "position": "prefix"}, parent=pwin)
+        self.assertIn("border-top-left-radius: 9px;", btn_b_pre.styleSheet())
+        self.assertIn("border-top-right-radius: 2px;", btn_b_pre.styleSheet())
+
+        btn_b_suf = TagButton({"name": "접미태그", "position": "suffix"}, parent=pwin)
+        self.assertIn("border-top-left-radius: 2px;", btn_b_suf.styleSheet())
+        self.assertIn("border-top-right-radius: 9px;", btn_b_suf.styleSheet())
+
+        # 3. Style C (edge): accent border bar on left/right
+        class MockEdgeWin(QWidget):
+            def __init__(self):
+                super().__init__()
+                self.config = {"tag_position_indicator_style": "edge", "tag_format": "bracket", "position": "suffix"}
+        ewin = MockEdgeWin()
+        btn_c_pre = TagButton({"name": "접두태그", "position": "prefix"}, parent=ewin)
+        self.assertIn("border-left: 3.5px solid", btn_c_pre.styleSheet())
+
+        btn_c_suf = TagButton({"name": "접미태그", "position": "suffix"}, parent=ewin)
+        self.assertIn("border-right: 3.5px solid", btn_c_suf.styleSheet())
+
+        # 4. Group override: forces all child buttons to uniform position & format
+        gw_override = GroupWidget({
+            "id": "g_ovr", "name": "통일그룹",
+            "override_tags": True, "tag_position": "prefix", "tag_format": "hashtag"
+        })
+        btn_child = TagButton({"name": "원래접미", "position": "suffix", "format": "bracket"}, parent=gw_override.body_container)
+        gw_override.flow_layout.addWidget(btn_child)
+        pos, fmt, _ = btn_child.get_resolved_properties()
+        self.assertEqual(pos, "prefix")
+        self.assertEqual(fmt, "hashtag")
+        self.assertIn("#원래접미", btn_child.text())
 
 
 if __name__ == "__main__":

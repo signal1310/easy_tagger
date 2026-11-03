@@ -4,7 +4,9 @@ from typing import Optional
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QColor, QFont
 from PyQt6.QtWidgets import (
+    QApplication,
     QColorDialog,
+    QComboBox,
     QDialog,
     QFormLayout,
     QGroupBox,
@@ -18,7 +20,12 @@ from PyQt6.QtWidgets import (
 from src.core.defaults import PRESET_COLORS
 from src.core.tag_parser import get_tag_name, parse_tag_definition
 from src.ui.styles.theme_manager import ThemeManager
-from src.ui.widgets.tag_button import compute_tag_button_qss, compute_tag_button_width
+from src.ui.widgets.tag_button import (
+    build_tag_tooltip,
+    compute_tag_button_qss,
+    compute_tag_button_width,
+    format_display_label,
+)
 
 
 class PastelColorPicker(QGroupBox):
@@ -129,7 +136,7 @@ class TagDialog(QDialog):
         self.edit_name = QLineEdit()
         self.edit_name.setMinimumHeight(32)
         self.edit_name.setPlaceholderText("예: 여행, 4K, -fps 60, -score ?")
-        self.edit_name.textChanged.connect(self._update_preview)
+        self.edit_name.textChanged.connect(self._on_name_text_changed)
         self.edit_name.returnPressed.connect(self._save_and_accept)
         form.addRow("태그 이름:", self.edit_name)
 
@@ -139,6 +146,20 @@ class TagDialog(QDialog):
         self.edit_desc.textChanged.connect(self._update_preview)
         self.edit_desc.returnPressed.connect(self._save_and_accept)
         form.addRow("태그 설명:", self.edit_desc)
+
+        self.combo_pos = QComboBox()
+        self.combo_pos.addItem("기본/그룹 설정 따름 (자동)", "auto")
+        self.combo_pos.addItem("접두 (Prefix) — 파일명 앞", "prefix")
+        self.combo_pos.addItem("접미 (Suffix) — 파일명 뒤", "suffix")
+        self.combo_pos.currentIndexChanged.connect(self._update_preview)
+        form.addRow("태그 위치:", self.combo_pos)
+
+        self.combo_fmt = QComboBox()
+        self.combo_fmt.addItem("자동 (기본 설정)", "auto")
+        self.combo_fmt.addItem("[태그]", "bracket")
+        self.combo_fmt.addItem("#태그", "hashtag")
+        self.combo_fmt.currentIndexChanged.connect(self._update_preview)
+        form.addRow("태그 형태:", self.combo_fmt)
 
         hint_color = "#a1a1aa" if self.effective_theme == "dark" else "#64748b"
         self.lbl_syntax_guide = QLabel("일반: 여행  |  고정 속성: -fps 60  |  입력형 속성: -score ?")
@@ -189,38 +210,117 @@ class TagDialog(QDialog):
         spec = parse_tag_definition(get_tag_name(self.data), fallback_mode=self.data.get("param_val_mode", ""))
         self.edit_name.setText(spec["name"])
         self.edit_desc.setText(self.data.get("description", ""))
+        pos = self.data.get("position", "auto")
+        fmt = self.data.get("format", "auto")
+        idx_pos = self.combo_pos.findData(pos)
+        if idx_pos >= 0:
+            self.combo_pos.setCurrentIndex(idx_pos)
+        idx_fmt = self.combo_fmt.findData(fmt)
+        if idx_fmt >= 0:
+            self.combo_fmt.setCurrentIndex(idx_fmt)
 
     def _set_color(self, hex_code: str):
         self.data["bg_color"] = hex_code
         self.data["text_color"] = ThemeManager.get_contrast_text_color(hex_code)
         self._update_preview()
 
+    def _on_name_text_changed(self, text: str):
+        stripped = text.strip()
+        if stripped.startswith("#"):
+            idx = self.combo_fmt.findData("hashtag")
+            if idx >= 0 and self.combo_fmt.currentIndex() != idx:
+                self.combo_fmt.blockSignals(True)
+                self.combo_fmt.setCurrentIndex(idx)
+                self.combo_fmt.blockSignals(False)
+        self._update_preview()
+
+    def _get_resolved_style_and_defaults(self):
+        cfg = {}
+        p = self.parent()
+        while p:
+            if hasattr(p, "config"):
+                cfg = p.config
+                break
+            p = p.parent() if hasattr(p, "parent") else None
+        if not cfg:
+            for top in QApplication.topLevelWidgets():
+                if hasattr(top, "config"):
+                    cfg = top.config
+                    break
+        default_pos = cfg.get("position", "suffix")
+        default_fmt = cfg.get("tag_format", "bracket")
+        ind_style = cfg.get("tag_position_indicator_style", "puzzle")
+        btn_h = int(cfg.get("button_height", self.button_height))
+        return default_pos, default_fmt, ind_style, btn_h
+
     def _update_preview(self):
-        spec = parse_tag_definition(self.edit_name.text().strip() or "미리보기")
+        raw_text = self.edit_name.text().strip()
+        spec = parse_tag_definition(raw_text or "미리보기")
         name, desc = spec["name"], self.edit_desc.text().strip()
-        if spec["tag_type"] == "param":
-            val_disp = spec["param_val"] or "(빈 값)"
-            self.lbl_detected_type.setText(
-                f"입력형 속성 (키: {spec['param_key']}) — 적용 시 값을 직접 입력"
-                if spec["param_val_mode"] == "prompt"
-                else f"고정 속성 (키: {spec['param_key']}, 값: {val_disp}) — 동일 키 값 교체"
-            )
+        pos = self.combo_pos.currentData() if hasattr(self, "combo_pos") else "auto"
+        fmt = self.combo_fmt.currentData() if hasattr(self, "combo_fmt") else "auto"
+
+        default_pos, default_fmt, ind_style, btn_h = self._get_resolved_style_and_defaults()
+        eff_pos = default_pos if pos == "auto" else pos
+        eff_fmt = default_fmt if fmt == "auto" else fmt
+
+        # 해시태그형일 때: 속성형식 미지원 및 일반 키워드 태그로 강제 처리
+        is_hashtag = (eff_fmt == "hashtag") or raw_text.startswith("#")
+        if is_hashtag:
+            spec["tag_type"] = "normal"
+            eff_fmt = "hashtag"
+            clean_name = name.strip().lstrip("#").strip() or "태그"
+            name = clean_name
+            self.lbl_syntax_guide.setText("※ #태그는 단일 키워드로 적용됩니다. (속성형식 미지원)")
+            self.lbl_detected_type.setText(f"파일명에 #{name} 형태로 추가")
         else:
-            self.lbl_detected_type.setText(f"일반 태그 — 파일명에 [{name}] 형태로 추가")
+            self.lbl_syntax_guide.setText("일반: 여행  |  고정 속성: -fps 60  |  입력형 속성: -score ?")
+            if spec["tag_type"] == "param":
+                val_disp = spec["param_val"] or "(빈 값)"
+                self.lbl_detected_type.setText(
+                    f"입력형 속성 (키: {spec['param_key']}) — 적용 시 값을 직접 입력"
+                    if spec["param_val_mode"] == "prompt"
+                    else f"고정 속성 (키: {spec['param_key']}, 값: {val_disp}) — 동일 키 값 교체"
+                )
+            else:
+                self.lbl_detected_type.setText(f"파일명에 [{name}] 형태로 추가")
 
         bg = self.data.get("bg_color", "#bae6fd")
-        self.preview_btn.setText(name)
-        self.preview_btn.setFixedSize(compute_tag_button_width(name, self.preview_btn.font()), self.button_height)
-        self.preview_btn.setStyleSheet(compute_tag_button_qss(bg, self.effective_theme, tag_state="none"))
-        self.preview_btn.setToolTip(desc if desc else "")
+        display_label = format_display_label(name, "none", eff_pos, eff_fmt, ind_style)
+        self.preview_btn.setText(display_label)
+        w = compute_tag_button_width(display_label, self.preview_btn.font())
+        self.preview_btn.setFixedSize(w, btn_h)
+        self.preview_btn.setStyleSheet(compute_tag_button_qss(bg, self.effective_theme, tag_state="none", position=eff_pos, indicator_style=ind_style))
+        self.preview_btn.setToolTip(build_tag_tooltip(desc, "none", eff_pos, eff_fmt))
 
     def _save_and_accept(self):
-        spec = parse_tag_definition(self.edit_name.text().strip() or "태그")
-        self.data.update(spec)
-        if spec["tag_type"] == "normal":
+        raw_text = self.edit_name.text().strip() or "태그"
+        pos = self.combo_pos.currentData()
+        fmt = self.combo_fmt.currentData()
+        default_pos, default_fmt, _, _ = self._get_resolved_style_and_defaults()
+        eff_fmt = default_fmt if fmt == "auto" else fmt
+
+        is_hashtag = (eff_fmt == "hashtag") or raw_text.startswith("#")
+        if is_hashtag:
+            clean_name = raw_text.lstrip("#").strip() or "태그"
+            self.data["name"] = clean_name
+            self.data["tag_type"] = "normal"
             for k in ("param_key", "param_val_mode", "param_val"):
                 self.data.pop(k, None)
+            if fmt == "auto" and raw_text.startswith("#"):
+                self.data["format"] = "hashtag"
+            else:
+                self.data["format"] = fmt
+        else:
+            spec = parse_tag_definition(raw_text)
+            self.data.update(spec)
+            if spec["tag_type"] == "normal":
+                for k in ("param_key", "param_val_mode", "param_val"):
+                    self.data.pop(k, None)
+            self.data["format"] = fmt
+
         self.data["description"] = self.edit_desc.text().strip()
+        self.data["position"] = pos
         self.data["text_color"] = ThemeManager.get_contrast_text_color(self.data.get("bg_color", "#bae6fd"))
         self.accept()
 

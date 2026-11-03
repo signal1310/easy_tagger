@@ -12,16 +12,35 @@ from src.ui.icons import icon_factory
 from src.ui.styles.theme_manager import ThemeManager
 
 
-def format_display_label(raw_label: str, tag_state: str) -> str:
+def format_display_label(
+    raw_label: str,
+    tag_state: str,
+    position: str = "suffix",
+    tag_format: str = "bracket",
+    indicator_style: str = "puzzle",
+) -> str:
+    """Formats tag display label: plain clean text for bracket tags, #tag for hashtag tags."""
+    clean_label = raw_label.strip().strip("[]#")
+    if tag_format == "hashtag":
+        formatted = f"#{clean_label}"
+    else:
+        formatted = clean_label
+
+    core_text = formatted
     if tag_state == "on":
-        return f"✓ {raw_label}"
+        return f"✓ {core_text}"
     if tag_state == "partial":
-        return f"◐ {raw_label}"
-    return raw_label
+        return f"◐ {core_text}"
+    return core_text
 
 
-def build_tag_tooltip(description: str, tag_state: str) -> str:
-    """Builds concise tooltip containing only essential description and active file toggle status."""
+def build_tag_tooltip(
+    description: str,
+    tag_state: str,
+    position: str = "suffix",
+    tag_format: str = "bracket",
+) -> str:
+    """Builds clean tooltip containing user description and active file toggle status without verbose position/format headers."""
     lines = []
     desc = description.strip()
     if desc:
@@ -50,9 +69,15 @@ def compute_tag_button_width(text: str, base_font: QFont, is_bold: bool = False)
 
 
 def compute_tag_button_qss(
-    bg_hex: str, effective_theme: str, tag_state: str = "none", is_drag_over: bool = False, is_live_dragging: bool = False
+    bg_hex: str,
+    effective_theme: str,
+    tag_state: str = "none",
+    is_drag_over: bool = False,
+    is_live_dragging: bool = False,
+    position: str = "suffix",
+    indicator_style: str = "puzzle",
 ) -> str:
-    """Computes dynamic QSS for TagButton across states ('none', 'on', 'partial', 'off', drag_over, live_dragging)."""
+    """Computes dynamic QSS for TagButton across states, supporting styles puzzle (asymmetric radius) and edge (accent bar)."""
     adapted_bg, contrast_text = ThemeManager.adapt_color_for_theme(bg_hex, effective_theme)
     base_color = QColor(adapted_bg)
     is_dark = effective_theme == "dark"
@@ -95,13 +120,43 @@ def compute_tag_button_qss(
         pressed = base_color.darker(110).name() if is_dark else base_color.darker(118).name()
         border, weight = f"1.5px solid {bdr_c}", "600"
 
+    # Style B: Puzzle-style asymmetric corner radius
+    if indicator_style == "puzzle":
+        if position == "prefix":
+            border_radius_css = """
+                border-top-left-radius: 9px;
+                border-bottom-left-radius: 9px;
+                border-top-right-radius: 2px;
+                border-bottom-right-radius: 2px;
+            """
+        else:
+            border_radius_css = """
+                border-top-left-radius: 2px;
+                border-bottom-left-radius: 2px;
+                border-top-right-radius: 9px;
+                border-bottom-right-radius: 9px;
+            """
+    else:
+        border_radius_css = "border-radius: 8px;"
+
+    # Style C: Edge accent border bar
+    border_accent = ""
+    if indicator_style == "edge":
+        accent_color = base_color.lighter(165).name() if is_dark else base_color.darker(150).name()
+        if position == "prefix":
+            border_accent = f"border-left: 3.5px solid {accent_color};"
+        else:
+            border_accent = f"border-right: 3.5px solid {accent_color};"
+
     style = f"""
         QPushButton {{
             background-color: {bg}; color: {fg};
             font-family: 'Segoe UI', 'Malgun Gothic', sans-serif;
             font-size: 13px; font-weight: {weight};
-            border: {border}; border-radius: 8px;
-            padding: 2px 6px; text-align: center;
+            border: {border};
+            {border_radius_css}
+            {border_accent}
+            padding: 2px 7px; text-align: center;
         }}
         QPushButton:hover {{ background-color: {hover}; }}
         QPushButton:pressed {{ background-color: {pressed}; }}
@@ -180,8 +235,40 @@ class TagButton(QPushButton):
             self.tag_state = state
             self.update_appearance()
 
+    def get_resolved_properties(self) -> tuple:
+        gw = self._get_parent_group_widget()
+        main_win = self.window()
+        if (not main_win or not hasattr(main_win, "config")) and gw:
+            main_win = gw.window()
+        cfg = getattr(main_win, "config", {})
+        if not cfg:
+            for top in QApplication.topLevelWidgets():
+                if hasattr(top, "config"):
+                    cfg = top.config
+                    break
+
+        default_pos = cfg.get("position", "suffix")
+        default_fmt = cfg.get("tag_format", "bracket")
+        indicator_style = cfg.get("tag_position_indicator_style", "puzzle")
+
+        if gw and getattr(gw, "group_data", {}).get("override_tags", False):
+            pos = gw.group_data.get("tag_position", default_pos)
+            fmt = gw.group_data.get("tag_format", default_fmt)
+            return pos, fmt, indicator_style
+
+        pos = self.data.get("position", "auto")
+        fmt = self.data.get("format", "auto")
+
+        if pos == "auto":
+            pos = default_pos
+        if fmt == "auto":
+            fmt = default_fmt
+
+        return pos, fmt, indicator_style
+
     def sizeHint(self) -> QSize:
-        display_text = format_display_label(get_tag_name(self.data, "Tag"), self.tag_state)
+        pos, fmt, ind = self.get_resolved_properties()
+        display_text = format_display_label(get_tag_name(self.data, "Tag"), self.tag_state, pos, fmt, ind)
         return QSize(compute_tag_button_width(display_text, self.font(), self.tag_state == "on"), self.fixed_height)
 
     def update_data(self, new_data: dict):
@@ -191,15 +278,16 @@ class TagButton(QPushButton):
     def update_appearance(self, is_drag_over: bool = False):
         spec = parse_tag_definition(get_tag_name(self.data), fallback_mode=self.data.get("param_val_mode", ""))
         self.data.update(spec)
-        display_label = format_display_label(spec["name"], self.tag_state)
+        pos, fmt, ind = self.get_resolved_properties()
+        display_label = format_display_label(spec["name"], self.tag_state, pos, fmt, ind)
         self.setText(display_label)
         is_live = getattr(self, "_is_live_dragging", False)
         w = compute_tag_button_width(display_label, self.font(), is_bold=(self.tag_state == "on" or is_drag_over or is_live))
         self.setFixedSize(w, self.fixed_height)
         self.updateGeometry()
-        self.setToolTip(build_tag_tooltip(self.data.get("description", ""), self.tag_state))
+        self.setToolTip(build_tag_tooltip(self.data.get("description", ""), self.tag_state, pos, fmt))
         bg = self.data.get("bg_color", "#bae6fd")
-        self.setStyleSheet(compute_tag_button_qss(bg, self.effective_theme, self.tag_state, is_drag_over, is_live))
+        self.setStyleSheet(compute_tag_button_qss(bg, self.effective_theme, self.tag_state, is_drag_over, is_live, pos, ind))
 
     def mousePressEvent(self, event):
         is_ctrl_left = event.button() == Qt.MouseButton.LeftButton and bool(event.modifiers() & Qt.KeyboardModifier.ControlModifier)

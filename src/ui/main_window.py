@@ -186,6 +186,7 @@ class MainWindow(QMainWindow):
             gw = GroupWidget(gdata, fixed_height=btn_h, effective_theme=eff, parent=self.groups_container)
             gw.addTagRequested.connect(self.group_ctrl.add_tag_to_group)
             gw.renameGroupRequested.connect(self.group_ctrl.rename_group)
+            gw.editGroupSettingsRequested.connect(self.group_ctrl.edit_group_settings)
             gw.deleteGroupRequested.connect(self.group_ctrl.delete_group)
             gw.collapseToggled.connect(self.group_ctrl.on_group_collapse_toggled)
             gw.groupReorderRequested.connect(self.group_ctrl.reorder_group)
@@ -207,6 +208,8 @@ class MainWindow(QMainWindow):
             self.group_widgets.append(gw)
 
         self.groups_layout.addStretch()
+        for btn in self.all_tag_buttons:
+            btn.update_appearance()
         self.file_ctrl.update_highlights()
 
     def _handle_dropped_files(self, paths: list):

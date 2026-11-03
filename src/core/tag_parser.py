@@ -7,11 +7,13 @@ PARAM_KEY_RE = re.compile(r'^-(\w+)')
 
 
 def get_tag_name(btn_data: dict, default: str = "") -> str:
-    """Consistently retrieves the tag name (without outer brackets) from button configuration data."""
+    """Consistently retrieves the tag name (without outer brackets or leading hashtag) from button configuration data."""
     raw = btn_data.get("name") or btn_data.get("tag_text") or btn_data.get("label") or default
     clean = str(raw).strip()
     if clean.startswith("[") and clean.endswith("]"):
         clean = clean[1:-1].strip()
+    elif clean.startswith("#"):
+        clean = clean.lstrip("#").strip()
     return clean
 
 
@@ -25,6 +27,8 @@ def parse_tag_definition(raw_name: str, fallback_mode: str = "") -> dict:
     clean = str(raw_name).strip()
     if clean.startswith("[") and clean.endswith("]"):
         clean = clean[1:-1].strip()
+    elif clean.startswith("#"):
+        clean = clean.lstrip("#").strip()
 
     param_match = PARAM_TAG_RE.match(clean)
     if param_match:
@@ -73,10 +77,11 @@ def parse_bracket_content(content: str) -> List[str]:
 
 def is_tag_in_tags(existing_tags: List[str], btn_data: dict) -> bool:
     """Checks whether the tag defined by btn_data is currently present in existing_tags."""
+    clean_existing = [t.strip().strip("[]#") for t in existing_tags]
     spec = parse_tag_definition(get_tag_name(btn_data), fallback_mode=btn_data.get("param_val_mode", ""))
     if spec["tag_type"] == "param":
-        key = spec["param_key"]
+        key = spec["param_key"].strip().strip("[]#")
         if spec["param_val_mode"] == "prompt":
-            return any(t.startswith(f"{key} ") or t == key for t in existing_tags)
-        return spec["name"] in existing_tags
-    return spec["name"] in existing_tags
+            return any(t.startswith(f"{key} ") or t == key for t in clean_existing)
+        return spec["name"].strip().strip("[]#") in clean_existing
+    return spec["name"].strip().strip("[]#") in clean_existing

@@ -11,6 +11,7 @@ from PyQt6.QtWidgets import (
     QLabel,
     QMenu,
     QPushButton,
+    QToolTip,
     QVBoxLayout,
     QWidget,
 )
@@ -129,6 +130,7 @@ class GroupWidget(QWidget):
 
     addTagRequested = pyqtSignal(str)
     renameGroupRequested = pyqtSignal(str)
+    editGroupSettingsRequested = pyqtSignal(str)
     deleteGroupRequested = pyqtSignal(str)
     collapseToggled = pyqtSignal(str, bool)
     groupReorderRequested = pyqtSignal(str, str, str)
@@ -438,13 +440,13 @@ class GroupWidget(QWidget):
         menu.setStyleSheet(ThemeManager.get_context_menu_style(eff))
         act_add = menu.addAction(icon_factory.get_icon("plus", theme=eff), "태그 추가...")
         menu.addSeparator()
-        act_rename = menu.addAction(icon_factory.get_icon("edit", theme=eff), "그룹 이름 변경...")
+        act_settings = menu.addAction(icon_factory.get_icon("settings", theme=eff), "그룹 설정...")
         act_del = menu.addAction(icon_factory.get_icon("trash", theme=eff), "그룹 삭제")
 
         chosen = menu.exec(global_pos or QCursor.pos())
         if chosen == act_add:
             self.addTagRequested.emit(self.group_id)
-        elif chosen == act_rename:
-            self.renameGroupRequested.emit(self.group_id)
+        elif chosen == act_settings:
+            self.editGroupSettingsRequested.emit(self.group_id)
         elif chosen == act_del:
             self.deleteGroupRequested.emit(self.group_id)

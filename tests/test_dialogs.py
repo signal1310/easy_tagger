@@ -73,6 +73,40 @@ class TestDialogs(unittest.TestCase):
         dark_tag_dlg = TagDialog(effective_theme="dark")
         swatches = [b for b in dark_tag_dlg.color_picker.findChildren(QPushButton) if b.objectName() != "btnSecondary"]
         self.assertGreaterEqual(len(swatches), 9)
+
+        # Auto-detect hashtag when typing '#'
+        auto_hash_dlg = TagDialog()
+        auto_hash_dlg.edit_name.setText("#여행")
+        self.assertEqual(auto_hash_dlg.combo_fmt.currentData(), "hashtag")
+        self.assertIn("#여행", auto_hash_dlg.preview_btn.text())
+        auto_hash_dlg._save_and_accept()
+        saved_hash = auto_hash_dlg.get_data()
+        self.assertEqual(saved_hash["name"], "여행")
+        self.assertEqual(saved_hash["format"], "hashtag")
+        self.assertEqual(saved_hash["tag_type"], "normal")
+
+        # Hashtag tags do not support param attributes
+        hash_param_dlg = TagDialog()
+        hash_param_dlg.combo_fmt.setCurrentIndex(hash_param_dlg.combo_fmt.findData("hashtag"))
+        hash_param_dlg.edit_name.setText("-fps 60")
+        hash_param_dlg._save_and_accept()
+        saved_hash_param = hash_param_dlg.get_data()
+        self.assertEqual(saved_hash_param["tag_type"], "normal")
+        self.assertNotIn("param_key", saved_hash_param)
+
+        # Preview button reflects puzzle indicator style and lacks verbose position/format tooltip
+        from PyQt6.QtWidgets import QWidget
+        class MockPuzzleParent(QWidget):
+            def __init__(self):
+                super().__init__()
+                self.config = {"tag_position_indicator_style": "puzzle", "position": "prefix", "tag_format": "bracket"}
+        puzzle_parent = MockPuzzleParent()
+        puzzle_dlg = TagDialog(parent=puzzle_parent)
+        puzzle_dlg.edit_name.setText("모서리테스트")
+        self.assertNotIn("⇤", puzzle_dlg.preview_btn.text())
+        self.assertIn("border-top-left-radius: 9px;", puzzle_dlg.preview_btn.styleSheet())
+        self.assertNotIn("위치:", puzzle_dlg.preview_btn.toolTip())
+        self.assertNotIn("형태:", puzzle_dlg.preview_btn.toolTip())
         self.assertIn("#0d5477", swatches[0].styleSheet())
 
     def test_settings_and_help_dialogs_titles_and_version(self):
@@ -90,6 +124,8 @@ class TestDialogs(unittest.TestCase):
         s_dlg.combo_theme.setCurrentIndex(s_dlg.combo_theme.findData("light"))
         s_dlg.combo_position.setCurrentIndex(s_dlg.combo_position.findData("prefix"))
         s_dlg.combo_style.setCurrentIndex(s_dlg.combo_style.findData("separate"))
+        s_dlg.combo_format.setCurrentIndex(s_dlg.combo_format.findData("hashtag"))
+        s_dlg.combo_indicator_style.setCurrentIndex(s_dlg.combo_indicator_style.findData("puzzle"))
         s_dlg.spin_height.setValue(44)
         s_dlg.chk_always_on_top.setChecked(True)
         s_dlg._save_and_accept()
@@ -98,6 +134,8 @@ class TestDialogs(unittest.TestCase):
         self.assertEqual(updated["theme"], "light")
         self.assertEqual(updated["position"], "prefix")
         self.assertEqual(updated["style"], "separate")
+        self.assertEqual(updated["tag_format"], "hashtag")
+        self.assertEqual(updated["tag_position_indicator_style"], "puzzle")
         self.assertEqual(updated["button_height"], 44)
         self.assertTrue(updated["always_on_top"])
 
@@ -125,6 +163,26 @@ class TestDialogs(unittest.TestCase):
         p_dlg.edit_text.setText(" 120 ")
         p_dlg._save_and_accept()
         self.assertEqual(p_dlg.get_text(), "120")
+
+        from src.ui.dialogs.group_properties_dialog import GroupPropertiesDialog
+        gp_dlg = GroupPropertiesDialog({"name": "테스트그룹", "override_tags": False}, effective_theme="dark")
+        self.assertEqual(gp_dlg.windowTitle(), "그룹 설정")
+        self.assertEqual(gp_dlg.edit_name.text(), "테스트그룹")
+        gp_dlg.edit_name.setText("")
+        gp_dlg._save_and_accept()
+        # Empty name should not accept
+        self.assertEqual(gp_dlg.get_data().get("name"), "테스트그룹")
+
+        gp_dlg.edit_name.setText("이름변경그룹")
+        gp_dlg.chk_override.setChecked(True)
+        gp_dlg.combo_position.setCurrentIndex(gp_dlg.combo_position.findData("prefix"))
+        gp_dlg.combo_format.setCurrentIndex(gp_dlg.combo_format.findData("hashtag"))
+        gp_dlg._save_and_accept()
+        gp_data = gp_dlg.get_data()
+        self.assertEqual(gp_data["name"], "이름변경그룹")
+        self.assertTrue(gp_data["override_tags"])
+        self.assertEqual(gp_data["tag_position"], "prefix")
+        self.assertEqual(gp_data["tag_format"], "hashtag")
 
         msg = ThemedMessageBox(
             QMessageBox.Icon.Warning, "경고", "내용", QMessageBox.StandardButton.Ok, QMessageBox.StandardButton.Ok, "dark"

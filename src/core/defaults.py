@@ -1,7 +1,7 @@
 from typing import Any, Dict, List, Tuple
 
 APP_NAME = "Easy Tagger"
-APP_VERSION = "v1.0.0"
+APP_VERSION = "v1.1.0"
 
 MIME_TAG = "application/x-easytagger-tag"
 MIME_GROUP = "application/x-easytagger-group"
@@ -26,6 +26,8 @@ def get_default_config() -> Dict[str, Any]:
         "theme": "system",
         "position": "suffix",
         "style": "merged",
+        "tag_format": "bracket",
+        "tag_position_indicator_style": "puzzle",
         "button_height": 38,
         "always_on_top": False,
         "window_width": 420,

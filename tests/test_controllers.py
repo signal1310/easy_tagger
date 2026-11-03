@@ -34,12 +34,15 @@ class TestControllers(unittest.TestCase):
         self.assertEqual(len(self.win.config["groups"]), initial_count + 1)
         new_gid = self.win.config["groups"][-1]["id"]
 
-        # 2. Rename Group
-        with patch("src.ui.controllers.group_controller.GroupDialog") as MockGD:
-            MockGD.return_value.exec.return_value = 1
-            MockGD.return_value.get_group_name.return_value = "변경된그룹"
-            self.win.group_ctrl.rename_group(new_gid)
+        # 2. Edit Group Settings (Integrated name & properties override)
+        with patch("src.ui.dialogs.group_properties_dialog.GroupPropertiesDialog") as MockGPD:
+            MockGPD.return_value.exec.return_value = 1
+            MockGPD.return_value.get_data.return_value = {
+                "name": "변경된그룹", "override_tags": True, "tag_position": "prefix", "tag_format": "hashtag"
+            }
+            self.win.group_ctrl.edit_group_settings(new_gid)
         self.assertEqual(self.win.config["groups"][-1]["name"], "변경된그룹")
+        self.assertTrue(self.win.config["groups"][-1]["override_tags"])
 
         # 3. Add Tag to Group
         with patch("src.ui.controllers.group_controller.TagDialog") as MockTD:

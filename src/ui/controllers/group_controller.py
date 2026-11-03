@@ -30,20 +30,26 @@ class GroupController:
             GroupModelService.add_group(self.win.config, name)
             self._commit_and_refresh(f"새 그룹 '{name}' 생성됨")
 
-    def rename_group(self, group_id: str) -> None:
+    def edit_group_settings(self, group_id: str) -> None:
         target = GroupModelService.find_group(self.win.config, group_id)
         if not target:
             return
-        dlg = GroupDialog(
-            title="그룹 이름 변경",
-            initial_name=target.get("name", ""),
+        from src.ui.dialogs.group_properties_dialog import GroupPropertiesDialog
+        dlg = GroupPropertiesDialog(
+            target,
             effective_theme=self.win.get_effective_theme(),
             parent=self.win,
         )
-        if dlg.exec() and dlg.get_group_name():
-            name = dlg.get_group_name()
-            if GroupModelService.rename_group(self.win.config, group_id, name):
-                self._commit_and_refresh(f"그룹 이름이 '{name}'(으)로 변경됨")
+        if dlg.exec():
+            data = dlg.get_data()
+            old_name = target.get("name", "")
+            target.update(data)
+            new_name = data.get("name", old_name)
+            msg = f"그룹 '{new_name}' 설정이 저장되었습니다."
+            self._commit_and_refresh(msg)
+
+    def rename_group(self, group_id: str) -> None:
+        self.edit_group_settings(group_id)
 
     def delete_group(self, group_id: str) -> None:
         target = GroupModelService.find_group(self.win.config, group_id)

@@ -1,6 +1,6 @@
 import os
 from dataclasses import dataclass, field
-from typing import List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from src.core.filename_builder import (
     apply_tag_to_tags_list,
@@ -72,6 +72,8 @@ def apply_tag_batch(
     tag_to_apply: str,
     position: str = "suffix",
     style: str = "merged",
+    default_format: str = "bracket",
+    tag_specs: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> BatchRenameResult:
     """Applies `tag_to_apply` across `file_paths` on disk and records renamed pairs."""
     res = BatchRenameResult()
@@ -85,7 +87,9 @@ def apply_tag_batch(
         basename, ext = os.path.splitext(filename)
         cleaned_base, existing_tags = extract_tags_and_base(basename)
         new_tags = apply_tag_to_tags_list(existing_tags, tag_to_apply)
-        new_basename = assemble_filename(cleaned_base, new_tags, position=position, style=style)
+        new_basename = assemble_filename(
+            cleaned_base, new_tags, position=position, style=style, default_format=default_format, tag_specs=tag_specs
+        )
         new_filename = f"{new_basename}{ext}"
         new_path = os.path.normpath(os.path.join(folder, new_filename))
 
@@ -115,6 +119,8 @@ def remove_tag_batch(
     tag_to_remove: str,
     position: str = "suffix",
     style: str = "merged",
+    default_format: str = "bracket",
+    tag_specs: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> BatchRenameResult:
     """Removes `tag_to_remove` from all `valid_paths` on disk and records renamed pairs."""
     res = BatchRenameResult()
@@ -123,7 +129,9 @@ def remove_tag_batch(
         basename, ext = os.path.splitext(filename)
         cleaned_base, existing_tags = extract_tags_and_base(basename)
         new_tags = remove_tag_from_tags_list(existing_tags, tag_to_remove)
-        new_basename = assemble_filename(cleaned_base, new_tags, position=position, style=style)
+        new_basename = assemble_filename(
+            cleaned_base, new_tags, position=position, style=style, default_format=default_format, tag_specs=tag_specs
+        )
         new_filename = f"{new_basename}{ext}"
         new_path = os.path.normpath(os.path.join(folder, new_filename))
 

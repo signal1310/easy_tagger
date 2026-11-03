@@ -66,6 +66,20 @@ class FileController:
             return f"{key} {dlg.get_text()}" if (dlg.exec() and dlg.get_text()) else None
         return spec["name"] if spec["name"] else None
 
+    def _get_tag_specs(self) -> dict:
+        specs = {}
+        for g in self.win.config.get("groups", []):
+            override = g.get("override_tags", False)
+            g_pos = g.get("tag_position")
+            g_fmt = g.get("tag_format")
+            for b in g.get("buttons", []):
+                spec = parse_tag_definition(get_tag_name(b))
+                name = spec["name"]
+                pos = g_pos if (override and g_pos) else b.get("position", "auto")
+                fmt = g_fmt if (override and g_fmt) else b.get("format", "auto")
+                specs[name] = {"position": pos, "format": fmt}
+        return specs
+
     def on_tag_button_clicked(self, btn: TagButton) -> None:
         valid_paths = [p for p in self.active_file_paths if os.path.exists(p)]
         if not valid_paths:
@@ -76,7 +90,12 @@ class FileController:
             spec = parse_tag_definition(get_tag_name(btn.data), fallback_mode=btn.data.get("param_val_mode", ""))
             tag_to_remove = spec["param_key"] if spec["tag_type"] == "param" else spec["name"]
             res = remove_tag_batch(
-                valid_paths, tag_to_remove, self.win.config.get("position", "suffix"), self.win.config.get("style", "merged")
+                valid_paths,
+                tag_to_remove,
+                self.win.config.get("position", "suffix"),
+                self.win.config.get("style", "merged"),
+                self.win.config.get("tag_format", "bracket"),
+                self._get_tag_specs(),
             )
             if res.rename_batch:
                 self.undo_service.push(res.rename_batch)
@@ -103,7 +122,12 @@ class FileController:
     def apply_tag_to_files(self, file_paths: List[str], tag_to_apply: str) -> None:
         self._detect_unknown_tags(file_paths)
         res = apply_tag_batch(
-            file_paths, tag_to_apply, self.win.config.get("position", "suffix"), self.win.config.get("style", "merged")
+            file_paths,
+            tag_to_apply,
+            self.win.config.get("position", "suffix"),
+            self.win.config.get("style", "merged"),
+            self.win.config.get("tag_format", "bracket"),
+            self._get_tag_specs(),
         )
         if res.rename_batch:
             self.undo_service.push(res.rename_batch)
