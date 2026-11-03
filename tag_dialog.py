@@ -1,6 +1,6 @@
 import uuid
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QColor
+from PyQt6.QtGui import QColor, QFont, QFontMetrics
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QLineEdit,
     QPushButton, QLabel, QColorDialog, QGroupBox
@@ -125,6 +125,11 @@ class TagDialog(QDialog):
         preview_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.preview_btn = QPushButton("미리보기")
         self.preview_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        preview_font = QFont("Segoe UI")
+        preview_font.setFamilies(["Segoe UI", "Malgun Gothic", "sans-serif"])
+        preview_font.setPixelSize(13)
+        preview_font.setWeight(QFont.Weight.DemiBold)
+        self.preview_btn.setFont(preview_font)
         preview_layout.addWidget(self.preview_btn)
         main_layout.addWidget(preview_group)
 
@@ -192,18 +197,24 @@ class TagDialog(QDialog):
         adapted_bg, fg = ThemeManager.adapt_color_for_theme(bg, self.effective_theme)
 
         self.preview_btn.setText(name)
-        fm = self.preview_btn.fontMetrics()
-        w = max(55, fm.horizontalAdvance(name) + 24)
+        calc_font = QFont(self.preview_btn.font())
+        calc_font.setFamilies(["Segoe UI", "Malgun Gothic", "sans-serif"])
+        calc_font.setPixelSize(13)
+        calc_font.setWeight(QFont.Weight.DemiBold)
+        fm = QFontMetrics(calc_font)
+        w = max(24, fm.horizontalAdvance(name) + 20)
         self.preview_btn.setFixedSize(w, self.button_height)
         preview_style = f"""
             QPushButton {{
                 background-color: {adapted_bg};
                 color: {fg};
-                font-family: 'Segoe UI', 'Malgun Gothic', -apple-system, sans-serif;
+                font-family: 'Segoe UI', 'Malgun Gothic', sans-serif;
                 font-size: 13px;
                 font-weight: 600;
+                border: 2px solid transparent;
                 border-radius: 8px;
-                border: none;
+                padding: 2px 6px;
+                text-align: center;
             }}
         """
         preview_style += "\n" + ThemeManager.get_tooltip_style(self.effective_theme)

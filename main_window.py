@@ -281,13 +281,10 @@ class MainWindow(QMainWindow):
         # Enable drop on window & scroll area to load files
         self.setAcceptDrops(True)
 
-        # Context menu on window & scroll area
-        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        self.customContextMenuRequested.connect(self._show_window_context_menu)
-        self.scroll_area.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        self.scroll_area.customContextMenuRequested.connect(self._show_window_context_menu)
-        self.groups_container.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        self.groups_container.customContextMenuRequested.connect(self._show_window_context_menu)
+        # Disable context menus on window and background areas (top action bar houses all actions)
+        self.setContextMenuPolicy(Qt.ContextMenuPolicy.NoContextMenu)
+        self.scroll_area.setContextMenuPolicy(Qt.ContextMenuPolicy.NoContextMenu)
+        self.groups_container.setContextMenuPolicy(Qt.ContextMenuPolicy.NoContextMenu)
 
     def _init_shortcuts(self):
         undo_action = QAction("실행 취소", self)
@@ -545,44 +542,6 @@ class MainWindow(QMainWindow):
                 return
             self._apply_tag_to_files(valid_paths, tag_to_apply)
 
-    # ------------------ Context Menu (Global Settings on Empty Area) ------------------
-
-    def _show_window_context_menu(self, pos=None):
-        eff = self.get_effective_theme()
-        menu = QMenu(self)
-        menu.setStyleSheet(ThemeManager.get_context_menu_style(eff))
-
-        # 1. Global Settings
-        action_settings = menu.addAction(icon_factory.get_icon("settings", theme=eff), "환경 설정... (Ctrl+,)")
-
-        menu.addSeparator()
-
-        # 2. Always on top (Pin)
-        is_pinned = bool(self.config.get("always_on_top", False))
-        pin_color = "#2563eb" if (eff == "light" and is_pinned) else ("#93c5fd" if is_pinned else None)
-        action_pin = menu.addAction(icon_factory.get_icon("pin", color=pin_color, theme=eff), "항상 위에 고정")
-        action_pin.setCheckable(True)
-        action_pin.setChecked(is_pinned)
-
-        # 3. Add Group
-        action_new_group = menu.addAction(icon_factory.get_icon("folder-plus", theme=eff), "새 그룹 추가...")
-
-        menu.addSeparator()
-
-        # 4. Undo
-        action_undo = menu.addAction(icon_factory.get_icon("undo", theme=eff), "실행 취소 (Ctrl+Z)")
-        action_undo.setEnabled(len(self.undo_stack) > 0)
-
-        chosen = menu.exec(QCursor.pos())
-        if chosen == action_settings:
-            self._open_settings_dialog()
-        elif chosen == action_pin:
-            self._toggle_pin()
-        elif chosen == action_new_group:
-            self._add_new_group()
-        elif chosen == action_undo:
-            self.undo_last_action()
-
     def _toggle_pin(self):
         new_state = not self.config.get("always_on_top", False)
         self.config["always_on_top"] = new_state
@@ -641,7 +600,6 @@ class MainWindow(QMainWindow):
             gw.collapseToggled.connect(self._on_group_collapse_toggled)
             gw.groupReorderRequested.connect(self._on_group_reorder)
             gw.tagMovedToGroupRequested.connect(self._on_tag_moved_to_group)
-            gw.emptyAreaRightClicked.connect(self._show_window_context_menu)
 
             # Add buttons to group
             for bdata in gdata.get("buttons", []):

@@ -94,7 +94,7 @@ class GroupWidget(QWidget):
         self.group_card = QFrame()
         self.group_card.setObjectName("groupCard")
         self.group_card.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        self.group_card.customContextMenuRequested.connect(self._emit_empty_right_click)
+        self.group_card.customContextMenuRequested.connect(lambda _: self._show_context_menu())
 
         card_layout = QVBoxLayout(self.group_card)
         card_layout.setContentsMargins(0, 0, 0, 0)
@@ -116,11 +116,13 @@ class GroupWidget(QWidget):
         # Symmetrical Indicator: '▼' when open, '▲' when closed
         self.lbl_indicator = QLabel(self.SYMBOL_EXPANDED if not self.collapsed else self.SYMBOL_COLLAPSED)
         self.lbl_indicator.setObjectName("lblGroupIndicator")
+        self.lbl_indicator.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         header_layout.addWidget(self.lbl_indicator)
 
         # Group Name
         self.lbl_title = QLabel(self.group_name)
         self.lbl_title.setObjectName("lblGroupTitle")
+        self.lbl_title.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         header_layout.addWidget(self.lbl_title)
 
         header_layout.addStretch()
@@ -141,7 +143,7 @@ class GroupWidget(QWidget):
         # 2. Body Container with FlowLayout (padding on sides/bottom so tags sit nicely inside card)
         self.body_container = QWidget()
         self.body_container.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        self.body_container.customContextMenuRequested.connect(self._emit_empty_right_click)
+        self.body_container.customContextMenuRequested.connect(lambda _: self._show_context_menu())
 
         self.flow_layout = FlowLayout(self.body_container, margin=6, h_spacing=8, v_spacing=8)
         card_layout.addWidget(self.body_container)
@@ -149,10 +151,10 @@ class GroupWidget(QWidget):
         main_layout.addWidget(self.group_card)
 
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        self.customContextMenuRequested.connect(self._emit_empty_right_click)
+        self.customContextMenuRequested.connect(lambda _: self._show_context_menu())
 
     def _emit_empty_right_click(self, _pos=None):
-        self.emptyAreaRightClicked.emit(QCursor.pos())
+        self._show_context_menu()
 
     def _start_group_drag(self):
         drag = QDrag(self)
@@ -234,16 +236,21 @@ class GroupWidget(QWidget):
     def add_tag_button(self, btn: TagButton):
         self.flow_layout.addWidget(btn)
 
-    def _show_context_menu(self, global_pos):
+    def _show_context_menu(self, global_pos=None):
         eff = self.effective_theme
         menu = QMenu(self)
         menu.setStyleSheet(ThemeManager.get_context_menu_style(eff))
 
+        action_add_tag = menu.addAction(icon_factory.get_icon("plus", theme=eff), "태그 추가...")
+        menu.addSeparator()
         action_rename = menu.addAction(icon_factory.get_icon("edit", theme=eff), "그룹 이름 변경...")
         action_delete = menu.addAction(icon_factory.get_icon("trash", theme=eff), "그룹 삭제")
 
-        chosen = menu.exec(global_pos)
-        if chosen == action_rename:
+        pos = global_pos or QCursor.pos()
+        chosen = menu.exec(pos)
+        if chosen == action_add_tag:
+            self.addTagRequested.emit(self.group_id)
+        elif chosen == action_rename:
             self.renameGroupRequested.emit(self.group_id)
         elif chosen == action_delete:
             self.deleteGroupRequested.emit(self.group_id)

@@ -1,7 +1,7 @@
 import os
 import json
 from PyQt6.QtCore import Qt, pyqtSignal, QSize, QMimeData
-from PyQt6.QtGui import QDragEnterEvent, QDragLeaveEvent, QDropEvent, QColor, QDrag
+from PyQt6.QtGui import QDragEnterEvent, QDragLeaveEvent, QDropEvent, QColor, QDrag, QFont, QFontMetrics
 from PyQt6.QtWidgets import QPushButton, QMenu, QApplication
 
 import icon_factory
@@ -35,6 +35,13 @@ class TagButton(QPushButton):
         self.tag_state = "none"  # "none" = no file active, "on" = tagged, "off" = not tagged
         self._drag_start_pos = None
 
+        # Standardize button font for consistent cross-platform metrics
+        btn_font = QFont("Segoe UI")
+        btn_font.setFamilies(["Segoe UI", "Malgun Gothic", "sans-serif"])
+        btn_font.setPixelSize(13)
+        btn_font.setWeight(QFont.Weight.DemiBold)
+        self.setFont(btn_font)
+
         self.setAcceptDrops(True)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
@@ -62,11 +69,25 @@ class TagButton(QPushButton):
             return f"◐ {raw_label}"
         return raw_label
 
+    def _calculate_width(self, text: str) -> int:
+        """Calculates precise button width based on actual font metrics without awkward excess margins or truncation."""
+        if not text:
+            return 24
+        # Use Bold (700) weight if state is 'on' or in drag over, otherwise DemiBold (600)
+        weight = QFont.Weight.Bold if self.tag_state == "on" else QFont.Weight.DemiBold
+        calc_font = QFont(self.font())
+        calc_font.setFamilies(["Segoe UI", "Malgun Gothic", "sans-serif"])
+        calc_font.setPixelSize(13)
+        calc_font.setWeight(weight)
+        fm = QFontMetrics(calc_font)
+        adv = fm.horizontalAdvance(text)
+        # 12px padding (6px left + 6px right) + 4px border (2px each side) + 4px safety buffer = 20px
+        return max(24, adv + 20)
+
     def sizeHint(self) -> QSize:
         label = get_tag_name(self.data, "Tag")
         display_text = self._format_display_label(label)
-        fm = self.fontMetrics()
-        w = max(55, fm.horizontalAdvance(display_text) + 24)
+        w = self._calculate_width(display_text)
         return QSize(w, self.fixed_height)
 
     def update_data(self, new_data: dict):
@@ -82,9 +103,9 @@ class TagButton(QPushButton):
 
         display_label = self._format_display_label(raw_label)
         self.setText(display_label)
-        fm = self.fontMetrics()
-        w = max(55, fm.horizontalAdvance(display_label) + 24)
+        w = self._calculate_width(display_label)
         self.setFixedSize(w, self.fixed_height)
+        self.updateGeometry()
 
         # Build tooltip: Description on hover as requested
         desc = self.data.get("description", "").strip()
@@ -196,7 +217,7 @@ class TagButton(QPushButton):
                 font-weight: {font_weight};
                 border: {border_style};
                 border-radius: 8px;
-                padding: 4px 8px;
+                padding: 2px 6px;
                 text-align: center;
             }}
             QPushButton:hover {{

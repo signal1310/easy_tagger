@@ -526,6 +526,35 @@ class TestAppWorkflow(unittest.TestCase):
             self.assertTrue(os.path.exists(missing_init), "config.init.json should be recreated automatically")
             self.assertTrue(len(cfg.get("groups", [])) >= 2)
 
+    def test_context_menus_and_tag_sizing(self):
+        """Verifies context menu removal on window, group context menu capabilities, and snug tag sizing."""
+        from PyQt6.QtCore import Qt
+        from PyQt6.QtGui import QFont, QFontMetrics
+        from tag_button import TagButton
+
+        # 1. Window context menus removed
+        self.assertEqual(self.win.contextMenuPolicy(), Qt.ContextMenuPolicy.NoContextMenu)
+        self.assertEqual(self.win.scroll_area.contextMenuPolicy(), Qt.ContextMenuPolicy.NoContextMenu)
+        self.assertEqual(self.win.groups_container.contextMenuPolicy(), Qt.ContextMenuPolicy.NoContextMenu)
+        self.assertFalse(hasattr(self.win, "_show_window_context_menu"))
+
+        # 2. Tag sizing: 1-2 char tags fit snugly without old 55px hard minimum
+        b1 = TagButton({"name": "1"}, fixed_height=38)
+        b2 = TagButton({"name": "4K"}, fixed_height=38)
+        self.assertLess(b1.width(), 55)
+        self.assertLess(b2.width(), 55)
+
+        # 3. Long tag sizing: no clipping
+        long_name = "매우길고긴동영상태그이름테스트2026하이라이트"
+        b_long = TagButton({"name": long_name}, fixed_height=38)
+        calc_f = QFont(b_long.font())
+        calc_f.setPixelSize(13)
+        calc_f.setWeight(QFont.Weight.Bold)
+        fm = QFontMetrics(calc_f)
+        adv = fm.horizontalAdvance(long_name)
+        # Button width must provide enough space for bold text + padding + border
+        self.assertGreaterEqual(b_long.width(), adv + 16)
+
 
 if __name__ == "__main__":
     unittest.main()
